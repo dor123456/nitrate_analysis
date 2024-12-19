@@ -42,6 +42,9 @@ t_max = 24*n_days
 applied_N = irrigation* fertigation_conc* n_days
 atm_columns = ["tAtm", "Prec", "rSoil", "rRoot", "hCritA", "rB", "hB", "ht", "tTop", "tBot", "Ampl", "cTop", "cBot"]
 
+
+h_conductivity = 30
+
 """
 Distributes the daily evapotranspiration value into hourly values based on a parabolic distribution.
 between 7 am to 17 pm, where tranpiration is 0.9 ET and evaporation is 0.1
@@ -87,7 +90,7 @@ def add_atm_pressure(ml):
     # ml.add_atmospheric_bc(atm)
     ml.add_atmospheric_bc(atm)
 
-def add_materials(ml, h_conductivity):
+def add_materials(ml):
     m = ml.get_empty_material_df(n=1)
     # [residual water content, saturated water content, a, n, hydraulic conductivity, l], [4 paramters of nitrate transport]
     m.loc[1] = [0.045, 0.3, 0.145, 2.68, h_conductivity, -0.5, 1.5, 10, 1, 0] # 6 retention curve + 4 soil solute paramters $sand
@@ -115,11 +118,11 @@ def create_profile(ml):
 
     ml.add_profile(profile)
 
-def initialize_model(ml, h_conductivity):
-    ml.add_time_info(tinit=0, tmax=t_max, print_times=True,dt=10^(-3), dtmin=10^(-7), dtmax=10^(-2))
+def initialize_model(ml):
+    ml.add_time_info(tinit=0, tmax=t_max, print_times=True) #,dt=10^(-3), dtmin=10^(-7), dtmax=10^(-2))
     ml.add_waterflow(model=0,top_bc=3, bot_bc=4, linitw=True)
     ml.add_solute_transport(model=0, top_bc=0, bot_bc=0) #equilibrium model, upper BC - conc flux BC, lower BC = zero conc gradient. 
-    add_materials(ml, h_conductivity)
+    add_materials(ml)
     create_profile(ml)
     ml.add_obs_nodes([20]) # to check if possible to add two depth 10 and 20 cm
     add_atm_pressure(ml)
@@ -147,14 +150,26 @@ def get_cvRoot_cvBot(ml):
     print(solute_levels)
     return solute_levels[["Sum(cvRoot)", "Sum(cvBot)"]] 
 
-#def create_graph_with_legen(x_axis, y_axis, legend):
+def create_graph_with_legend(df, y_axis, legend):
+    #nassuming the x axis is the df.index
+    # Plotting cv_root vs time
+    plt.figure(figsize=(10, 5))
+    for legend_val, group_df in df.groupby(legend):
+        plt.plot(group_df.index, group_df[y_axis], label=legend+f'{legend_val}')
+    
+    plt.xlabel('Time') # default
+    plt.ylabel(y_axis)
+    plt.title(f'{y_axis} over Time for Different {legend} Values')
+    plt.legend(title=legend)
+    plt.show()
 
 
 
 def create_h_conductivity_table():
     final_df = pd.DataFrame()
-    for h_conductivity in range(10, 100, 10):
-        ml = main(h_conductivity)
+    for value in range(10, 100, 10):
+        h_conductivity = value
+        ml = main()
         df = get_cvRoot_cvBot(ml)
         df["h_conductivity"] = h_conductivity
         df["applied_N"] = applied_N
@@ -162,33 +177,9 @@ def create_h_conductivity_table():
             final_df = df
         else:
             final_df = pd.concat([final_df, df])
-    
-    print(final_df)
-    for column in final_df.columns:
-        print("This:" + column + "is column name.")
-    print(final_df.index)
 
-
-    # Plotting cv_root vs time
-    plt.figure(figsize=(10, 5))
-    for h_conductivity, group_df in final_df.groupby('h_conductivity'):
-        plt.plot(group_df.index, group_df['Sum(cvRoot)'], label=f'h_conductivity {h_conductivity}')
-    
-    plt.xlabel('Time')
-    plt.ylabel('Sum(cvRoot)')
-    plt.title('Sum(cvRoot) over Time for Different h_conductivity Values')
-    plt.legend(title='h_conductivity')
-    plt.show()
-    
-    # Plotting Sum(cvBot) vs time
-    plt.figure(figsize=(10, 5))
-    for h_conductivity, group_df in final_df.groupby('h_conductivity'):
-        plt.plot(group_df.index, group_df['Sum(cvBot)'], label=f'h_conductivity {h_conductivity}')
-    plt.xlabel('Time')
-    plt.ylabel('Sum(cvBot)')
-    plt.title('Sum(cvBot) over Time for Different h_conductivity Values')
-    plt.legend(title='h_conductivity')
-    plt.show()
+    create_graph_with_legend(final_df, "Sum(cvRoot)", "h_conductivity")
+    create_graph_with_legend(final_df, "Sum(cvBot)", "h_conductivity")
 
     return final_df
 
@@ -208,13 +199,13 @@ def create_h_conductivity_table():
 
 # def hydrus_model(p): #p[0] is irrigation p[1] is fertilization
 # input units: cm, ppm, please note to unit convertion in the output of the script
-def main(h_conductivity=30): #
+def main(): #
     exe = os.path.join(os.getcwd(), "hydrus.exe") #this never change!!
     # Create the basic model
     ml = ps.Model(exe_name=exe, ws_name=ws, name="model", description=desc,
                 mass_units="M", time_unit="hours", length_unit="mm")
     #initialize the model
-    initialize_model(ml, h_conductivity)
+    initialize_model(ml)
     run_model(ml)
     return ml
 
