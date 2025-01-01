@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import time
 from collections import UserDict
 from typing import List
+from phydrus_model_initializer import DynamicConfig, PhydrusModelInit
+from static_configuration import static_config
 #%%
 # =============================================================================
 # This script is running hydrus model for 30 days
@@ -22,149 +24,6 @@ from typing import List
 # 
 # the C root max value is a paramter of the function and is running as a for loop for different values
 # =============================================================================
-
-ws = "fert_optimization"
-desc = "Fertilization optimization"
-
-#some initial paramters:
-inital_wc = 0.1
-initial_conc = 0
-croot_max = 40
-
-# fertigation paramters
-fertigation_conc = 40 # N-NO3
-daily_et = 0.5 # output flux of water by evaporation or by plant uptake 
-
-
-convertion_factor = 10 # between [mg/l * cm] as an input to [mg/m2] as the desired output
-n_days = 30 # choose between 1 to 31
-t_max = 24*n_days
-
-atm_columns = ["tAtm", "Prec", "rSoil", "rRoot", "hCritA", "rB", "hB", "ht", "tTop", "tBot", "Ampl", "cTop", "cBot"]
-
-def calculate_applied_N(config):
-    return daily_et * config["leaching_fraction"] * fertigation_conc * n_days
-
-class Config(UserDict):
-    # Example usage
-    default_config = {
-        "h_conductivity" : 1,
-        "resid_wc" : 0.075,
-        "sat_wc" : 0.3,
-        "alpha" : 0.1075,
-        "n_empiric" : 2.285,
-        "root_depth" : 20,
-        "leaching_fraction" : 1
-    }
-
-    def __init__(self, defaults=default_config):
-        super().__init__(defaults)
-
-
-"""
-Distributes the daily evapotranspiration value into hourly values based on a parabolic distribution.
-between 7 am to 17 pm, where tranpiration is 0.9 ET and evaporation is 0.1
-
-Parameters:
-- daily_evapotranspiration (float): The daily evapotranspiration value.
-- n (int): Number of repetitions (days) for which the hourly distribution is to be generated. Default is 1.
-
-Returns:
-- pd.DataFrame: A DataFrame with columns 'hour', 'evapotranspiration', 'transpiration', and 'evaporation'.
-"""
-def linear_distribute_ET(daily_ET, n=1):
-    ET = np.zeros(24)
-    ET[7:18] = daily_ET/(18-7)
-    transpiration = 0.9 * ET
-    evaporation = 0.1 * ET
-    hours = np.arange(24*n)
-    # Create the DataFrame with repeated values
-    return pd.DataFrame({
-        'hour': hours,
-        'evapotranspiration': np.tile(ET, n),
-        'transpiration': np.tile(transpiration, n),
-        'evaporation': np.tile(evaporation, n)
-    })
-
-def add_atm_pressure(ml, config):
-    # (module) -> None
-    # =============================================================================
-    # atm_bc
-    # =============================================================================
-    ET = linear_distribute_ET(daily_et, n_days)
-    atm = pd.DataFrame(0, index=np.arange(t_max), columns=atm_columns) # add columns according to the defined n_days
-
-    atm['tAtm'] = np.arange(1,t_max+1)
-    atm['rSoil'] = ET['evaporation']
-    atm['rRoot'] = ET['transpiration']
-    atm['hCritA'] = 1000000
-    irrigation = daily_et*config["leaching_fraction"]
-
-    precipitation_interval = [5+(i*24) for i in range(n_days)]
-    atm.iloc[[precipitation_interval], 1] = irrigation
-    atm.iloc[[precipitation_interval], 11] = fertigation_conc #ctop
-
-    # ml.add_atmospheric_bc(atm)
-    ml.add_atmospheric_bc(atm)
-
-def add_materials(ml, config):
-    m = ml.get_empty_material_df(n=1)
-    print("H_conductivty: " + str(config["h_conductivity"]))
-    # [residual water content, saturated water content, a, n, hydraulic conductivity, l], [4 paramters of nitrate transport]
-    m.loc[1] = [config["resid_wc"], config["sat_wc"], config["alpha"], config["n_empiric"], config["h_conductivity"], -0.5, 1.5, 10, 1, 0] # 6 retention curve + 4 soil solute paramters $sand
-
-    ml.add_material(m)
-
-def add_solute(ml, config):
-    # =============================================================================
-    # solute 
-    # =============================================================================
-    sol1 = ml.get_empty_solute_df()
-    sol1["beta"] = 1
-    ml.add_solute(sol1, difw=0.068, difg=0)
-
-def create_profile(ml, config):
-    profile = ps.create_profile(top=0,bot=-100, h=0.12, dx=0.1, conc=0)
-    profile['h'] = inital_wc
-    profile['Conc'] = initial_conc
-    root_dist1 = np.linspace(1,0,int(config["root_depth"])) # root distribution decrease linearly from 1 to 0 in the upper 30 cm
-    root_dist2 =  np.zeros(len(profile)-len(root_dist1)) # root distribution is 0 from 30 to 100 cm
-    profile['Beta'] = np.concatenate([root_dist1,root_dist2]) # define root distribution in profile df
-
-    ml.add_profile(profile)
-
-def initialize_model(ml, config):
-    ml.add_time_info(tinit=0, tmax=t_max, print_times=True) #,dt=10^(-3), dtmin=10^(-7), dtmax=10^(-2))
-    ml.add_waterflow(model=0,top_bc=3, bot_bc=4, linitw=True)
-    ml.add_solute_transport(model=0, top_bc=-1, bot_bc=0) #equilibrium model, upper BC - conc flux BC, lower BC = zero conc gradient. 
-    add_materials(ml, config)
-    create_profile(ml, config)
-    ml.add_obs_nodes([20]) # to check if possible to add two depth 10 and 20 cm
-    add_atm_pressure(ml, config)
-    add_solute(ml, config)
-    ml.add_root_uptake(model=0, crootmax=croot_max, p0=-10, p2h=-400, p2l=-600, p3=-8000, r2h=0.02, r2l=0.004, poptm=[-25]) # model=Feddes, define Cmax, paramters for tomato from hydrus library 
-    ml.write_input()
-    print("MODEL INITIALIZED")
-
-def pretty_show_model(ml):
-    """forward simulation"""
-    run_model(ml)
-    df = ml.read_tlevel()
-    df.plot(subplots=True)
-    plt.show()
-
-def run_model(ml):
-    start_execution = time.time()
-    ml.simulate()
-    end_execution = time.time()
-    print('run time is:' + str(end_execution-start_execution))
-
-def get_cvRoot(ml):
-    # sum(cvRoot) == comulative solute uptake
-    # sum(cvBot) == comulative bottom flux solute
-    solute_levels = ml.read_solutes()
-    print(solute_levels)
-    return solute_levels[["Sum(cvRoot)"]] 
 
 def create_graph_with_legend(df, y_axis, legend):
     #nassuming the x axis is the df.index
@@ -188,12 +47,12 @@ def create_graph(df: pd.DataFrame, x_axis: str, y_axis: str) -> None:
     plt.grid(True)
     plt.show(block=False)
 
-def extract_relevant_data(ml : ps.Model, config : Config) -> float:
+def extract_relevant_data(phy_ml : PhydrusModelInit) -> float:
     """
     Use case specific extracts the information from the module of the output variable
     """
-    df = get_cvRoot(ml)
-    df["applied_N"] = calculate_applied_N(config)
+    df = phy_ml.get_cvRoot()
+    df["applied_N"] = phy_ml.get_applied_N()
     df["NUE"] = df["Sum(cvRoot)"] / df["applied_N"]
     # extracting the NUE from the latest available time, this will be the NUE value to represent this var_value
     max_time_row = df.loc[df.index.max()] 
@@ -213,13 +72,13 @@ def create_variable_table(input_variable : str, output_variable : str, start_val
     The function plots a graph of the output variable as a function of the input varibale and returns a dataframe with 
     with the information as well
     """
-    config = Config()
+    dynamic_config = DynamicConfig()
     final_df = pd.DataFrame({input_variable : [], output_variable : []})
     for var_value in np.arange(start_val, end_val, jump_val):
         var_value = round(var_value, 2)
-        config[input_variable]= var_value
-        ml = main(config)
-        relevant_data = extract_relevant_data(ml, config)
+        dynamic_config[input_variable]= var_value
+        phy_ml = PhydrusModelInit(dynamic_config, static_config)
+        relevant_data = extract_relevant_data(phy_ml)
         print(relevant_data)
         final_df = add_relevant_data(final_df, relevant_data, input_variable, var_value, output_variable)
     final_df.to_csv(f"{input_variable}_table.csv")
@@ -235,15 +94,6 @@ def create_variable_table(input_variable : str, output_variable : str, start_val
 
 # def hydrus_model(p): #p[0] is irrigation p[1] is fertilization
 # input units: cm, ppm, please note to unit convertion in the output of the script
-def main(config): #
-    exe = os.path.join(os.getcwd(), "../hydrus.exe") #this never change!!
-    # Create the basic model
-    ml = ps.Model(exe_name=exe, ws_name=ws, name="model", description=desc,
-                mass_units="M", time_unit="hours", length_unit="mm")
-    #initialize the model
-    initialize_model(ml, config)
-    run_model(ml)
-    return ml
 
 def create_variable_graphs():
     print(create_variable_table("h_conductivity", "NUE", 1, 20, 2))
@@ -276,5 +126,5 @@ def create_graphs_from_csv(filenames : List[str] = ["h_conductivity_table.csv", 
 
 
 if __name__ == "__main__":
-    create_graphs_from_csv()
+    create_variable_graphs()
 
