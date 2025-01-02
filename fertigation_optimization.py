@@ -114,7 +114,6 @@ def create_graphs_from_csv(filenames : List[str] = ["h_conductivity_table.csv", 
          # Use the first column as x-axis and second column as y-axis
         x_axis = df.columns[1]
         y_axis = df.columns[2]
-        
         df.plot(x=x_axis, y=y_axis, ax=axs[i], title=f'{x_axis} vs {y_axis}')
 
     # Hide any empty subplots
@@ -127,4 +126,5 @@ def create_graphs_from_csv(filenames : List[str] = ["h_conductivity_table.csv", 
 
 if __name__ == "__main__":
     create_variable_graphs()
+    #create_graphs_from_csv()
 

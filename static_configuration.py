@@ -9,10 +9,11 @@ static_config = {
     "initial_conc": 0,
     "croot_max": 40,
     "top": 0,  # depth of surface
-    "bot": -100,  # depth of bottom
+    "bottom": -100,  # depth of bottom in METERS
+    "dx": 1,
     "hydro_pressure": 0.12,
-    "concentration": 0,
-    "root_distribution": lambda root_depth: np.linspace(1, 0, root_depth),  # root distribution decrease linearly from 1 to 0 in the root depth
+    "conc": 0,
+    "root_distribution": lambda root_depth: np.linspace(1, 0, int(root_depth)),  # root distribution decrease linearly from 1 to 0 in the root depth
     "root_distribution_fill": lambda root_distribution, profile: np.concatenate((root_distribution, np.zeros(len(profile) - len(root_distribution)))),  # root distribution is 0 from the root_depth to the end
     # Atm pressure variables
     "fertigation_conc": 40,  # N-NO3
@@ -23,10 +24,9 @@ static_config = {
     "PREC": 1,
     "CTOP": 11,
     "irrigation_func": lambda daily_et, leaching_fraction: daily_et * leaching_fraction,
-    "precipitation_interval": [6 + (i * 24) for i in range(30)],  # hours in which precipitation occurs
-    "leaching_fraction": 1.1,
-    "transpiration_frac": 0.01,
-    "evaporation_frac": 0.99,
+    "precipitation_interval": lambda n_days: [6 + (i * 24) for i in range(n_days)],  # hours in which precipitation occurs
+    "transpiration_frac": 0.9,
+    "evaporation_frac": 0.1,
     
     # Material information
     "l": -0.5,
@@ -57,5 +57,5 @@ static_config = {
     "poptm": [-25],
 
     # Observation node
-    "DEPTHS": [10, 20, 40]
+    "DEPTHS": [10]
 }
