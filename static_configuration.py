@@ -5,7 +5,7 @@ static_config = {
     "desc": "Fertilization optimization",
 
     # The variables that define the initial state of the model
-    "initial_wc": 0.1,
+    "initial_wc": 0.185,
     "initial_conc": 0,
     "croot_max": 40,
     "top": 0,  # depth of surface
@@ -18,8 +18,8 @@ static_config = {
     # Atm pressure variables
     "fertigation_conc": 40,  # N-NO3
     "daily_et": 0.2,  # output flux of water by evaporation or by plant uptake 
-    "n_days": 30,  # choose between 1 to 31
-    "n_hours": 24 * 30,
+    "n_days": 12,  # choose between 1 to 31
+    "n_hours": 24 * 12,
     "atm_columns": ["tAtm", "Prec", "rSoil", "rRoot", "hCritA", "rB", "hB", "ht", "tTop", "tBot", "Ampl", "cTop", "cBot"],
     "PREC": 1,
     "CTOP": 11,
@@ -57,5 +57,5 @@ static_config = {
     "poptm": [-25],
 
     # Observation node
-    "DEPTHS": [10]
+    "DEPTHS": [20]
 }

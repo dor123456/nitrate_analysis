@@ -11,6 +11,8 @@ from collections import UserDict
 from typing import List
 from phydrus_model_initializer import DynamicConfig, PhydrusModelInit
 from static_configuration import static_config
+from scipy.optimize import minimize
+
 #%%
 # =============================================================================
 # This script is running hydrus model for 30 days
@@ -25,8 +27,9 @@ from static_configuration import static_config
 # the C root max value is a paramter of the function and is running as a for loop for different values
 # =============================================================================
 
+
 def create_graph_with_legend(df, y_axis, legend):
-    #nassuming the x axis is the df.index
+    # assuming the x axis is the df.index
     # Plotting cv_root vs time
     plt.figure(figsize=(10, 5))
     for legend_val, group_df in df.groupby(legend):
@@ -81,7 +84,7 @@ def create_variable_table(input_variable : str, output_variable : str, start_val
         relevant_data = extract_relevant_data(phy_ml)
         print(relevant_data)
         final_df = add_relevant_data(final_df, relevant_data, input_variable, var_value, output_variable)
-    final_df.to_csv(f"{input_variable}_table.csv")
+    final_df.to_csv(f"variable_csvs/{input_variable}_table.csv")
     create_graph(final_df, input_variable, output_variable)
 
     return final_df
@@ -110,7 +113,7 @@ def create_graphs_from_csv(filenames : List[str] = ["h_conductivity_table.csv", 
 
     # Loop through each file and plot
     for i, file in enumerate(filenames):
-        df = pd.read_csv(file)
+        df = pd.read_csv("variable.csvs/" +file)
          # Use the first column as x-axis and second column as y-axis
         x_axis = df.columns[1]
         y_axis = df.columns[2]
@@ -124,7 +127,51 @@ def create_graphs_from_csv(filenames : List[str] = ["h_conductivity_table.csv", 
     plt.show()
 
 
+test_theta_interval = [f"11-{i}" for i in range(19, 31)] # 19 to 30 of november
+wc_filename = "cleaned_real_water_content_data.csv"
+
+def get_real_world_theta(depth=static_config["DEPTHS"][0], filename=wc_filename):
+    """
+    assuming there is only one depth
+    """
+    real_wc = pd.read_csv(filename)
+    return real_wc[f"wc_B{depth}_mean"]
+    
+
+def cost_function(model_wc, real_wc):
+    """
+    calculates the distance between the columns
+    """
+    if(len(model_wc) != len(real_wc)):
+        return 1000000000
+    return np.sum(np.abs(model_wc - real_wc))
+
+def minimize_cost_function(params):
+    dynamic_config = DynamicConfig()
+    dynamic_config['h_conductivity'] = params[0]
+    dynamic_config['resid_wc'] = params[1]
+    dynamic_config['sat_wc'] = params[2]
+    dynamic_config['alpha'] = params[3]
+    dynamic_config['n_empiric'] = params[4]
+    phy_ml = PhydrusModelInit(dynamic_config, static_config)
+    return cost_function(phy_ml.get_theta(), get_real_world_theta())
+
+def get_solute_variables():
+    initial_params_dict = {"h_conductivity" : 1,
+        "resid_wc" : 0.075,
+        "sat_wc" : 0.3,
+        "alpha" : 0.1075,
+        "n_empiric" : 2.285}
+    result = minimize(minimize_cost_function, list(initial_params_dict.values()), options={'disp': True})
+    optimized_params_dict = dict(zip(initial_params_dict.keys(), result.x))
+    print(optimized_params_dict)
+    return optimized_params_dict
+
 if __name__ == "__main__":
-    create_variable_graphs()
+    #create_variable_graphs()
     #create_graphs_from_csv()
+    get_solute_variables()
+
+    
+
 

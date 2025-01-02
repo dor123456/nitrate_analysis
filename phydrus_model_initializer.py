@@ -16,10 +16,10 @@ class DynamicConfig(UserDict):
         "alpha" : 0.1075,
         "n_empiric" : 2.285,
         # plant variables
-        "root_depth" : 40,
+        "root_depth" : 20,
         "leaching_fraction" : 1,
         #precipitaion
-        "precipitation" : 0.3
+        "precipitation" : 0.5
     }
     
     def __init__(self, defaults=default_config):
@@ -41,7 +41,7 @@ class PhydrusModelInit():
         self.static_config = static_config # name of csv file containing precipitation info
         self.create_model()
         self.initialize_model()
-        self.run_model
+        self.run_model()
 
     def create_model(self): #
         exe = os.path.join(os.getcwd(), "../hydrus.exe") #this never change!!
@@ -70,7 +70,6 @@ class PhydrusModelInit():
         ET[7:18] = daily_ET/(18-7)
         transpiration = self.static_config["transpiration_frac"] * ET
         evaporation =self.static_config["evaporation_frac"] * ET
-        print("transpiration: " ,transpiration , " evaporation: " , evaporation)
         # Create the DataFrame with repeated values
         return pd.DataFrame({
             'hour': hours,
@@ -86,7 +85,6 @@ class PhydrusModelInit():
         # =============================================================================
         ml = self.ml
         ET = self.linear_distribute_ET()
-        print(ET[7:])
         atm = pd.DataFrame(0, index=np.arange(self.static_config["n_hours"]), columns=self.static_config["atm_columns"]) # add columns according to the defined n_days
 
         atm['tAtm'] = np.arange(1,self.static_config["n_hours"]+1)
@@ -98,8 +96,6 @@ class PhydrusModelInit():
             self.add_real_precipitation(atm)
         else:
             self.add_fake_precipitation(atm)
-        print("ATM: ")
-        print(atm[6:])
         # ml.add_atmospheric_bc(atm)
         ml.add_atmospheric_bc(atm)
 
@@ -125,16 +121,13 @@ class PhydrusModelInit():
         profile['h'] = self.static_config["initial_wc"]
         profile['Conc'] = self.static_config["initial_conc"]
         root_distribution = self.static_config["root_distribution"](self.dynamic_config["root_depth"])
-        print(len(root_distribution))
-        print(len(profile))
         profile['Beta'] = self.static_config["root_distribution_fill"](root_distribution, profile) # define root distribution in profile df
-        print(list(profile['Beta']))
         ml.add_profile(profile)
 
     
     def initialize_model(self):
         ml = self.ml
-        ml.add_time_info(tmax=self.static_config["n_hours"], print_times=True) #,dt=10^(-3), dtmin=10^(-7), dtmax=10^(-2))
+        ml.add_time_info(tinit=0, tmax=self.static_config["n_hours"], print_times=True) #,dt=10^(-3), dtmin=10^(-7), dtmax=10^(-2))
         ml.add_waterflow(model=self.static_config["VAN_GENUCH_6_PARAM"],top_bc=self.static_config["ATM_W_SURFACE_RUNOFF"], bot_bc=self.static_config["FREE_DRAINAGE"], linitw=True)
         ml.add_solute_transport(model=self.static_config["EQ_SOLUTE_TRANPORT"], top_bc=self.static_config["CAUCHY_BOUNDRY_COND"], bot_bc=self.static_config["CONT_CONC_PROFILE"]) #equilibrium model, upper BC - conc flux BC, lower BC = zero conc gradient. 
         self.add_materials()
@@ -142,7 +135,6 @@ class PhydrusModelInit():
         ml.add_obs_nodes(self.static_config["DEPTHS"]) # to check if possible to add two depth 10 and 20 cm
         self.add_atm_pressure()
         self.add_solute()
-        print(self.static_config["FEDES_ET_AL"], self.dynamic_config["root_depth"], self.static_config["p0"], self.static_config["p2h"], self.static_config["p2l"], self.static_config["p3"], self.static_config["r2h"], self.static_config["r2l"], self.static_config["poptm"])
         ml.add_root_uptake(model=self.static_config["FEDES_ET_AL"], crootmax=self.static_config["croot_max"], p0=self.static_config["p0"], p2h=self.static_config["p2h"], p2l=self.static_config["p2l"], p3=self.static_config["p3"], r2h=self.static_config["r2h"], r2l=self.static_config["r2l"], poptm=self.static_config["poptm"]) # model=Feddes, define Cmax, paramters for tomato from hydrus library 
         ml.write_input()
         print("MODEL INITIALIZED")
@@ -154,6 +146,14 @@ class PhydrusModelInit():
         solute_levels = ml.read_solutes()
         print(solute_levels[["Sum(cvRoot)"]])
         return solute_levels[["Sum(cvRoot)"]] 
+
+    def get_theta(self):
+        ml = self.ml
+        node_dict = ml.read_obs_node()
+        # assuming right now that there is only one node
+        theta = list(node_dict.values())[0]["theta"]
+        print(theta) 
+        return theta
 
     def pretty_show_model(self):
         """forward simulation"""
