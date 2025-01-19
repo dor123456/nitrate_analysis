@@ -5,13 +5,14 @@ static_config = {
     "desc": "Fertilization optimization",
 
     # The variables that define the initial state of the model
-    "initial_wc": 0.185,
+    "initial_wc_10": 0.185,
+    "initial_wc_40": 0.3,
+    "initial_wc_distribution": lambda resid_wc, wc_10, wc_40, sat_wc, profile: np.concatenate((np.linspace(resid_wc, wc_10, 10), np.linspace(wc_10, wc_40, 30), np.linspace(wc_40, sat_wc, len(profile)-40))),
     "initial_conc": 0,
     "croot_max": 40,
     "top": 0,  # depth of surface
-    "bottom": -100,  # depth of bottom in METERS
+    "bottom": -49,  # depth of bottom in cm
     "dx": 1,
-    "hydro_pressure": 0.12,
     "conc": 0,
     "root_distribution": lambda root_depth: np.linspace(1, 0, int(root_depth)),  # root distribution decrease linearly from 1 to 0 in the root depth
     "root_distribution_fill": lambda root_distribution, profile: np.concatenate((root_distribution, np.zeros(len(profile) - len(root_distribution)))),  # root distribution is 0 from the root_depth to the end
@@ -25,21 +26,21 @@ static_config = {
     "CTOP": 11,
     "irrigation_func": lambda daily_et, leaching_fraction: daily_et * leaching_fraction,
     "precipitation_interval": lambda n_days: [6 + (i * 24) for i in range(n_days)],  # hours in which precipitation occurs
-    "transpiration_frac": 0.9,
-    "evaporation_frac": 0.1,
+    "transpiration_frac": 0.001,
+    "evaporation_frac": 0.999,
     
     # Material information
     "l": -0.5,
     "nitrate_trans": (1.5, 10, 1, 0), 
 
     # Solute information
-    "sol_beta": 1,
+    # "sol_beta": 1,
     "sol_difw": 0.068,
 
     # Waterflow information
     "VAN_GENUCH_6_PARAM": 0,
-    "ATM_W_SURFACE_RUNOFF": 3,
-    "FREE_DRAINAGE": 4,
+    "ATM_W_SURFACE_LAYER": 2,
+    "SEEPAGE_FACE": 6,
 
     # Solute transport information
     "EQ_SOLUTE_TRANPORT": 0,
@@ -57,5 +58,5 @@ static_config = {
     "poptm": [-25],
 
     # Observation node
-    "DEPTHS": [20]
+    "DEPTHS": [-10, -20, -40]
 }

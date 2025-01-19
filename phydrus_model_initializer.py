@@ -10,16 +10,16 @@ class DynamicConfig(UserDict):
     # Example usages
     default_config = {
         # soil variables
-        "h_conductivity" : 1,
-        "resid_wc" : 0.075,
-        "sat_wc" : 0.3,
-        "alpha" : 0.1075,
-        "n_empiric" : 2.285,
+        "h_conductivity" : 18, # calculated initial value
+        "resid_wc" : 0.02, # calculated initial value
+        "sat_wc" : 0.38, # calculated initial value
+        "alpha" : 0.1005,
+        "n_empiric" : 1.7889,
         # plant variables
         "root_depth" : 20,
         "leaching_fraction" : 1,
         #precipitaion
-        "precipitation" : 0.5
+        "precipitation" : 0.5 # calculated initial value
     }
     
     def __init__(self, defaults=default_config):
@@ -112,13 +112,13 @@ class PhydrusModelInit():
     # =============================================================================
         ml = self.ml
         sol1 = ml.get_empty_solute_df()
-        sol1["beta"] = self.static_config["sol_beta"]
         ml.add_solute(sol1, difw=self.static_config["sol_difw"], difg=0)
 
     def create_profile(self):
         ml = self.ml
-        profile = ps.create_profile(top=self.static_config["top"], bot=self.static_config["bottom"],h=self.static_config["hydro_pressure"], conc=self.static_config["conc"], dx = self.static_config["dx"])
-        profile['h'] = self.static_config["initial_wc"]
+        profile = ps.create_profile(top=self.static_config["top"], bot=self.static_config["bottom"],h=self.static_config["initial_wc_10"], conc=self.static_config["conc"], dx = self.static_config["dx"])
+        profile['h'] = self.static_config["initial_wc_distribution"](self.dynamic_config["resid_wc"], self.static_config["initial_wc_10"], self.static_config["initial_wc_40"], self.dynamic_config["sat_wc"], profile)
+        print("PRINTING PROFILE H: ", profile['h'][30:45])
         profile['Conc'] = self.static_config["initial_conc"]
         root_distribution = self.static_config["root_distribution"](self.dynamic_config["root_depth"])
         profile['Beta'] = self.static_config["root_distribution_fill"](root_distribution, profile) # define root distribution in profile df
@@ -128,7 +128,7 @@ class PhydrusModelInit():
     def initialize_model(self):
         ml = self.ml
         ml.add_time_info(tinit=0, tmax=self.static_config["n_hours"], print_times=True) #,dt=10^(-3), dtmin=10^(-7), dtmax=10^(-2))
-        ml.add_waterflow(model=self.static_config["VAN_GENUCH_6_PARAM"],top_bc=self.static_config["ATM_W_SURFACE_RUNOFF"], bot_bc=self.static_config["FREE_DRAINAGE"], linitw=True)
+        ml.add_waterflow(model=self.static_config["VAN_GENUCH_6_PARAM"],top_bc=self.static_config["ATM_W_SURFACE_LAYER"], bot_bc=self.static_config["SEEPAGE_FACE"], linitw=True)
         ml.add_solute_transport(model=self.static_config["EQ_SOLUTE_TRANPORT"], top_bc=self.static_config["CAUCHY_BOUNDRY_COND"], bot_bc=self.static_config["CONT_CONC_PROFILE"]) #equilibrium model, upper BC - conc flux BC, lower BC = zero conc gradient. 
         self.add_materials()
         self.create_profile()
@@ -148,12 +148,17 @@ class PhydrusModelInit():
         return solute_levels[["Sum(cvRoot)"]] 
 
     def get_theta(self):
+        """
+        returns a dict of depth : pandas df with index column and theta column at that depth
+        """
         ml = self.ml
         node_dict = ml.read_obs_node()
-        # assuming right now that there is only one node
-        theta = list(node_dict.values())[0]["theta"]
-        print(theta) 
-        return theta
+        depth_to_theta = {}
+        print("Node dict: ",node_dict)
+        depths = self.static_config['DEPTHS']
+        for index, value in enumerate(node_dict.values()):
+            depth_to_theta[depths[index]] = value["theta"]
+        return depth_to_theta
 
     def pretty_show_model(self):
         """forward simulation"""
