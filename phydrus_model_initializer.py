@@ -19,7 +19,8 @@ class DynamicConfig(UserDict):
         "root_depth" : 20,
         "leaching_fraction" : 1,
         #precipitaion
-        "precipitation" : 0.5 # calculated initial value
+        "precipitation" : 0.5, # calculated initial value
+        "fertigation_conc" : 40,
     }
     
     def __init__(self, defaults=default_config):
@@ -50,17 +51,17 @@ class PhydrusModelInit():
                     mass_units="M", time_unit="hours", length_unit="mm")
 
     def get_applied_N(self):
-        return self.dynamic_config["precipitation"] * self.static_config["fertigation_conc"] * self.static_config["n_days"]
+        return self.dynamic_config["precipitation"] * self.dynamic_config["fertigation_conc"] * self.static_config["n_days"]
 
     def add_fake_precipitation(self, atm):
         irrigation = self.static_config["irrigation_func"](self.static_config["daily_et"], self.static_config["leaching_fraction"])
         atm.iloc[[self.static_config["precipitation_interval"](self.static_config["n_days"])], self.static_config["PREC"]] = irrigation
-        atm.iloc[[self.static_config["precipitation_interval"](self.static_config["n_days"])], self.static_config["CTOP"]] = self.static_config["fertigation_conc"] #ctop
+        atm.iloc[[self.static_config["precipitation_interval"](self.static_config["n_days"])], self.static_config["CTOP"]] = self.dynamic_config["fertigation_conc"] #ctop
 
     def add_real_precipitation(self, atm):
         irrigation = self.dynamic_config["precipitation"]
         atm.iloc[[self.static_config["precipitation_interval"](self.static_config["n_days"])], self.static_config["PREC"]] = irrigation
-        atm.iloc[[self.static_config["precipitation_interval"](self.static_config["n_days"])], self.static_config["CTOP"]] = self.static_config["fertigation_conc"] #ctop
+        atm.iloc[[self.static_config["precipitation_interval"](self.static_config["n_days"])], self.static_config["CTOP"]] = self.dynamic_config["fertigation_conc"] #ctop
 
     def linear_distribute_ET(self):
         daily_ET = self.static_config["daily_et"]
@@ -116,10 +117,14 @@ class PhydrusModelInit():
 
     def create_profile(self):
         ml = self.ml
-        profile = ps.create_profile(top=self.static_config["top"], bot=self.static_config["bottom"],h=self.static_config["initial_wc_10"], conc=self.static_config["conc"], dx = self.static_config["dx"])
-        profile['h'] = self.static_config["initial_wc_distribution"](self.dynamic_config["resid_wc"], self.static_config["initial_wc_10"], self.static_config["initial_wc_40"], self.dynamic_config["sat_wc"], profile)
-        print("PRINTING PROFILE H: ", profile['h'][30:45])
-        profile['Conc'] = self.static_config["initial_conc"]
+        profile = ps.create_profile(top=self.static_config["top"], bot=self.static_config["bottom"],h=self.static_config["initial_wc_10"], conc=self.static_config["initial_conc"], dx = self.static_config["dx"])
+        if self.static_config["auto_wc_and_NO3"] == True:
+            profile['h'] = self.static_config["initial_wc_distribution"](self.dynamic_config["resid_wc"], self.static_config["initial_wc_10"], self.static_config["initial_wc_40"], self.dynamic_config["sat_wc"], profile)
+            print("PRINTING PROFILE H: ", profile['h'][30:45])
+            profile['Conc'] = self.static_config["initial_conc_distribution"](self.static_config["initial_conc"], profile)
+        else:
+            profile['h'] = self.static_config["initial_wc_distribution"]
+            profile['Conc'] = self.static_config["initial_conc"]
         root_distribution = self.static_config["root_distribution"](self.dynamic_config["root_depth"])
         profile['Beta'] = self.static_config["root_distribution_fill"](root_distribution, profile) # define root distribution in profile df
         ml.add_profile(profile)

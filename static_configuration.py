@@ -7,20 +7,20 @@ static_config = {
     # The variables that define the initial state of the model
     "initial_wc_10": 0.185,
     "initial_wc_40": 0.3,
+    "auto_wc_and_NO3": True,
     "initial_wc_distribution": lambda resid_wc, wc_10, wc_40, sat_wc, profile: np.concatenate((np.linspace(resid_wc, wc_10, 10), np.linspace(wc_10, wc_40, 30), np.linspace(wc_40, sat_wc, len(profile)-40))),
-    "initial_conc": 0,
+    "initial_conc": 30,
+    "initial_conc_distribution": lambda initial_conc, profile: np.linspace(initial_conc, 0, len(profile)), # finish this for starting stage 
     "croot_max": 40,
     "top": 0,  # depth of surface
     "bottom": -49,  # depth of bottom in cm
     "dx": 1,
-    "conc": 0,
     "root_distribution": lambda root_depth: np.linspace(1, 0, int(root_depth)),  # root distribution decrease linearly from 1 to 0 in the root depth
     "root_distribution_fill": lambda root_distribution, profile: np.concatenate((root_distribution, np.zeros(len(profile) - len(root_distribution)))),  # root distribution is 0 from the root_depth to the end
     # Atm pressure variables
-    "fertigation_conc": 40,  # N-NO3
     "daily_et": 0.2,  # output flux of water by evaporation or by plant uptake 
-    "n_days": 12,  # choose between 1 to 31
-    "n_hours": 24 * 12,
+    "n_days": 1,  # choose between 1 to 31
+    "n_hours": 24 * 1,
     "atm_columns": ["tAtm", "Prec", "rSoil", "rRoot", "hCritA", "rB", "hB", "ht", "tTop", "tBot", "Ampl", "cTop", "cBot"],
     "PREC": 1,
     "CTOP": 11,
@@ -31,7 +31,7 @@ static_config = {
     
     # Material information
     "l": -0.5,
-    "nitrate_trans": (1.5, 10, 1, 0), 
+    "nitrate_trans": (1.5, 10, 1, 0), # bulk.d +-0.3 DisperL 10, frac, mobile_wc
 
     # Solute information
     # "sol_beta": 1,

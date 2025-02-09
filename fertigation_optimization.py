@@ -209,7 +209,7 @@ def check_minimize_cost_function():
     plt.show()
 
 def get_solute_variables():
-    open("params_cost_hydro_10.txt", "w").close()
+    open("params_cost_hydro_10.txt", "w").close() # erase the ouput file where we write the params and their cost
     initial_params_dict = {"alpha" : 0.11560592, # 0.036 <= x <= 0.145
         "n_empiric" : 1.764367} # 1.37 <= x <=2.68   
     result = minimize(minimize_cost_function, list(initial_params_dict.values()),method="Nelder-Mead",
@@ -221,9 +221,10 @@ def get_solute_variables():
     return optimized_params_dict
 
 if __name__ == "__main__":
-    get_solute_variables()
-    # dynamic_config = DynamicConfig()
-    # phy_ml = PhydrusModelInit(dynamic_config, static_config)
+    # get_solute_variables()
+    dynamic_config = DynamicConfig()
+    phy_ml = PhydrusModelInit(dynamic_config, static_config)
+    phy_ml.ml.read_nod_inf()
     # print(phy_ml.get_theta())
     # phy_ml.get_theta()
     # get_real_world_theta()
