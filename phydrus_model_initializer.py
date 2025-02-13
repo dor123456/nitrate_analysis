@@ -20,7 +20,7 @@ class DynamicConfig(UserDict):
         "leaching_fraction" : 1,
         #precipitaion
         "precipitation" : 0.5, # calculated initial value
-        "fertigation_conc" : 40,
+        "fertigation_conc" : 1,
     }
     
     def __init__(self, defaults=default_config):
@@ -133,7 +133,7 @@ class PhydrusModelInit():
     
     def initialize_model(self):
         ml = self.ml
-        ml.add_time_info(tinit=0, tmax=self.static_config["n_hours"], print_times=True) #,dt=10^(-3), dtmin=10^(-7), dtmax=10^(-2))
+        ml.add_time_info(tinit=0, tmax=self.static_config["n_hours"], print_times=True, dt=10^(-3), dtmin=10^(-7), dtmax=10^(-2))
         ml.add_waterflow(model=self.static_config["VAN_GENUCH_6_PARAM"],top_bc=self.static_config["ATM_W_SURFACE_LAYER"], bot_bc=self.static_config["SEEPAGE_FACE"], linitw=True)
         ml.add_solute_transport(model=self.static_config["EQ_SOLUTE_TRANPORT"], top_bc=self.static_config["CAUCHY_BOUNDRY_COND"], bot_bc=self.static_config["CONT_CONC_PROFILE"]) #equilibrium model, upper BC - conc flux BC, lower BC = zero conc gradient. 
         self.add_materials()

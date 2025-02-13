@@ -8,9 +8,9 @@ static_config = {
     "initial_wc_10": 0.185,
     "initial_wc_40": 0.3,
     "auto_wc_and_NO3": True,
-    "initial_wc_distribution": lambda resid_wc, wc_10, wc_40, sat_wc, profile: 0.02, # np.concatenate((np.linspace(resid_wc, wc_10, 10), np.linspace(wc_10, wc_40, 30), np.linspace(wc_40, sat_wc, len(profile)-40))),
-    "initial_conc": 30,
-    "initial_conc_distribution": lambda initial_conc, profile: np.linspace(initial_conc, 0, len(profile)), # finish this for starting stage 
+    "initial_wc_distribution": lambda resid_wc, wc_10, wc_40, sat_wc, profile: np.concatenate((np.linspace(3*resid_wc, wc_10, 10), np.linspace(wc_10, wc_40, 30), np.linspace(wc_40, 0.9*sat_wc, len(profile)-40))),
+    "initial_conc": 10,
+    "initial_conc_distribution": lambda initial_conc, profile: np.full(len(profile), initial_conc), # finish this for starting stage 
     "croot_max": 40,
     "top": 0,  # depth of surface
     "bottom": -49,  # depth of bottom in cm
