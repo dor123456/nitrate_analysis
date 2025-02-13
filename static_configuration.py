@@ -8,7 +8,7 @@ static_config = {
     "initial_wc_10": 0.185,
     "initial_wc_40": 0.3,
     "auto_wc_and_NO3": True,
-    "initial_wc_distribution": lambda resid_wc, wc_10, wc_40, sat_wc, profile: np.concatenate((np.linspace(resid_wc, wc_10, 10), np.linspace(wc_10, wc_40, 30), np.linspace(wc_40, sat_wc, len(profile)-40))),
+    "initial_wc_distribution": lambda resid_wc, wc_10, wc_40, sat_wc, profile: 0.02, # np.concatenate((np.linspace(resid_wc, wc_10, 10), np.linspace(wc_10, wc_40, 30), np.linspace(wc_40, sat_wc, len(profile)-40))),
     "initial_conc": 30,
     "initial_conc_distribution": lambda initial_conc, profile: np.linspace(initial_conc, 0, len(profile)), # finish this for starting stage 
     "croot_max": 40,
@@ -26,8 +26,8 @@ static_config = {
     "CTOP": 11,
     "irrigation_func": lambda daily_et, leaching_fraction: daily_et * leaching_fraction,
     "precipitation_interval": lambda n_days: [6 + (i * 24) for i in range(n_days)],  # hours in which precipitation occurs
-    "transpiration_frac": 0.001,
-    "evaporation_frac": 0.999,
+    "transpiration_frac": 0.3,
+    "evaporation_frac": 0.7,
     
     # Material information
     "l": -0.5,

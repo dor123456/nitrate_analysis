@@ -11,6 +11,7 @@ from collections import UserDict
 from typing import List
 from phydrus_model_initializer import DynamicConfig, PhydrusModelInit
 from static_configuration import static_config
+# from midrasha_soil_static_config import static_config
 from scipy.optimize import minimize, least_squares
 import io
 import sys
@@ -110,6 +111,9 @@ def create_variable_graphs():
     print(create_variable_table("leaching_fraction", "NUE", 0.8, 1.2))
 
 def create_graphs_from_csv(filenames : List[str] = ["h_conductivity_table.csv", "leaching_fraction_table.csv", "n_empiric_table.csv", "resid_wc_table.csv", "root_depth_table.csv", "sat_wc_table.csv"]) -> None:
+    """
+    gets the filenames of relevant tables and plots them in pretty graphs
+    """
     fig, axs = plt.subplots(nrows=2, ncols=3, figsize=(15, 10))
     axs = axs.flatten()
 
@@ -148,7 +152,7 @@ def get_real_world_theta(depths=static_config["DEPTHS"], filename=wc_filename):
     
 def residual_function(model_wc, real_wc):
     """
-    calculates the residual cost between all the data points in the theta columns
+    calculates the residual cost for all the data points' theta columns
     for different depths, between the model and the real world
     """
     print("REAL WC: ", real_wc)
@@ -182,33 +186,35 @@ def valid_input_range(params):
     return False
 
 def minimize_resid_function(params):
+    """
+    the resid function the algorithm is supposed to minimize. Receives the parameters of alpha and n_empiric and
+    outputs a list of all the resids between the theta in the real world and in the model
+    """
     dynamic_config = DynamicConfig()
     dynamic_config['alpha'] = params[0]
     dynamic_config['n_empiric'] = params[1]
     if not valid_input_range(params):
         return 100000000
     phy_ml = PhydrusModelInit(dynamic_config, static_config)
-    resids = residual_function(phy_ml.get_theta(), get_real_world_theta())
+    resids = residual_function(phy_ml.get_node_info(column_name="theta"), get_real_world_theta())
     cost = np.sum(resids)
     with open('params_cost_hydro_10.txt', 'a') as fd:
         fd.write('params: ' + str(params) + " cost: " + str(cost) + "\n")
     return resids
 
 def minimize_cost_function(params):
+    """
+    cost function that recieves the params n and alpha and returns the sum of the distances between
+    the theta in all depths in the model and the theta in all the depths in the real world.
+    """
     resids = minimize_resid_function(params)
     print(resids)
     return np.sum(resids)
 
-def check_minimize_cost_function():
-    x = np.linspace(-10, 10, 100)
-    y = [minimize_cost_function([xi]) for xi in x]
-    plt.plot(x, y)
-    plt.xlabel('Parameter Value')
-    plt.ylabel('Cost')
-    plt.title('Cost Function Behavior')
-    plt.show()
-
 def get_solute_variables():
+    """
+    The function that runs the logic behing inverse solution for the soil properties in the midrasha.
+    """
     open("params_cost_hydro_10.txt", "w").close() # erase the ouput file where we write the params and their cost
     initial_params_dict = {"alpha" : 0.11560592, # 0.036 <= x <= 0.145
         "n_empiric" : 1.764367} # 1.37 <= x <=2.68   
@@ -222,13 +228,13 @@ def get_solute_variables():
 
 if __name__ == "__main__":
     # get_solute_variables()
-    dynamic_config = DynamicConfig()
-    phy_ml = PhydrusModelInit(dynamic_config, static_config)
-    phy_ml.ml.read_nod_inf()
+    # dynamic_config = DynamicConfig()
+    # phy_ml = PhydrusModelInit(dynamic_config, static_config)
+    # phy_ml.ml.read_nod_inf()
     # print(phy_ml.get_theta())
     # phy_ml.get_theta()
     # get_real_world_theta()
-    # create_variable_graphs()
+    create_variable_graphs()
     # create_graphs_from_csv()"""
     # minimize_resid_function([0.124,2.28])
 

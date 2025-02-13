@@ -127,6 +127,7 @@ class PhydrusModelInit():
             profile['Conc'] = self.static_config["initial_conc"]
         root_distribution = self.static_config["root_distribution"](self.dynamic_config["root_depth"])
         profile['Beta'] = self.static_config["root_distribution_fill"](root_distribution, profile) # define root distribution in profile df
+        print(profile)
         ml.add_profile(profile)
 
     
@@ -152,18 +153,18 @@ class PhydrusModelInit():
         print(solute_levels[["Sum(cvRoot)"]])
         return solute_levels[["Sum(cvRoot)"]] 
 
-    def get_theta(self):
+    def get_node_info(self, column_name="theta"):
         """
-        returns a dict of depth : pandas df with index column and theta column at that depth
+        returns a dict of depth : pandas df with index column and requested column at that depth
         """
         ml = self.ml
         node_dict = ml.read_obs_node()
-        depth_to_theta = {}
+        depth_to_requested_column = {}
         print("Node dict: ",node_dict)
         depths = self.static_config['DEPTHS']
         for index, value in enumerate(node_dict.values()):
-            depth_to_theta[depths[index]] = value["theta"]
-        return depth_to_theta
+            depth_to_requested_column[depths[index]] = value[column_name]
+        return depth_to_requested_column
 
     def pretty_show_model(self):
         """forward simulation"""
