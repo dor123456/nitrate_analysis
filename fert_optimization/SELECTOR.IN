@@ -27,7 +27,7 @@ iModel  iHyst
 0.02 0.38 0.1005 1.7889 18.0 -0.5
 *** BLOCK C: TIME INFORMATION ****************************************************
 dt dtMin dtMax dMul dMul2 ItMin ItMax MPL 
--9 -13 -12 1.3 0.7 3 7 287 
+0.01 1e-05 5 1.3 0.7 3 7 287 
 tInit tMax 
 0 288 
 lPrint nPrintSteps tPrintInterval lEnter 

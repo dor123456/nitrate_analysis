@@ -62,7 +62,7 @@ class PhydrusModelInit():
         irrigation = self.dynamic_config["precipitation"]
         atm.iloc[[self.static_config["precipitation_interval"](self.static_config["n_days"])], self.static_config["PREC"]] = irrigation
         atm.iloc[[self.static_config["precipitation_interval"](self.static_config["n_days"])], self.static_config["CTOP"]] = self.dynamic_config["fertigation_conc"] #ctop
-
+        print(atm[5:10])
     def linear_distribute_ET(self):
         daily_ET = self.static_config["daily_et"]
         days = self.static_config["n_days"]
@@ -133,7 +133,7 @@ class PhydrusModelInit():
     
     def initialize_model(self):
         ml = self.ml
-        ml.add_time_info(tinit=0, tmax=self.static_config["n_hours"], print_times=True, dt=10^(-3), dtmin=10^(-7), dtmax=10^(-2))
+        ml.add_time_info(tinit=0, tmax=self.static_config["n_hours"], print_times=True) # , dt=10^(-3), dtmin=10^(-7), dtmax=10^(-2))
         ml.add_waterflow(model=self.static_config["VAN_GENUCH_6_PARAM"],top_bc=self.static_config["ATM_W_SURFACE_LAYER"], bot_bc=self.static_config["SEEPAGE_FACE"], linitw=True)
         ml.add_solute_transport(model=self.static_config["EQ_SOLUTE_TRANPORT"], top_bc=self.static_config["CAUCHY_BOUNDRY_COND"], bot_bc=self.static_config["CONT_CONC_PROFILE"]) #equilibrium model, upper BC - conc flux BC, lower BC = zero conc gradient. 
         self.add_materials()
