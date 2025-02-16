@@ -34,7 +34,7 @@ static_config = {
     "nitrate_trans": (1.5, 10, 1, 0), # bulk.d +-0.3 DisperL 10, frac, mobile_wc
 
     # Solute information
-    # "sol_beta": 1,
+    "sol_beta": 1,
     "sol_difw": 0.068,
 
     # Waterflow information

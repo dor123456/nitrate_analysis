@@ -62,7 +62,7 @@ class PhydrusModelInit():
         irrigation = self.dynamic_config["precipitation"]
         atm.iloc[[self.static_config["precipitation_interval"](self.static_config["n_days"])], self.static_config["PREC"]] = irrigation
         atm.iloc[[self.static_config["precipitation_interval"](self.static_config["n_days"])], self.static_config["CTOP"]] = self.dynamic_config["fertigation_conc"] #ctop
-        print(atm[5:10])
+
     def linear_distribute_ET(self):
         daily_ET = self.static_config["daily_et"]
         days = self.static_config["n_days"]
@@ -113,6 +113,7 @@ class PhydrusModelInit():
     # =============================================================================
         ml = self.ml
         sol1 = ml.get_empty_solute_df()
+        sol1["beta"] = self.static_config["sol_beta"]
         ml.add_solute(sol1, difw=self.static_config["sol_difw"], difg=0)
 
     def create_profile(self):
@@ -120,14 +121,12 @@ class PhydrusModelInit():
         profile = ps.create_profile(top=self.static_config["top"], bot=self.static_config["bottom"],h=self.static_config["initial_wc_10"], conc=self.static_config["initial_conc"], dx = self.static_config["dx"])
         if self.static_config["auto_wc_and_NO3"] == True:
             profile['h'] = self.static_config["initial_wc_distribution"](self.dynamic_config["resid_wc"], self.static_config["initial_wc_10"], self.static_config["initial_wc_40"], self.dynamic_config["sat_wc"], profile)
-            print("PRINTING PROFILE H: ", profile['h'][30:45])
             profile['Conc'] = self.static_config["initial_conc_distribution"](self.static_config["initial_conc"], profile)
         else:
             profile['h'] = self.static_config["initial_wc_distribution"]
             profile['Conc'] = self.static_config["initial_conc"]
         root_distribution = self.static_config["root_distribution"](self.dynamic_config["root_depth"])
         profile['Beta'] = self.static_config["root_distribution_fill"](root_distribution, profile) # define root distribution in profile df
-        print(profile)
         ml.add_profile(profile)
 
     
@@ -160,7 +159,6 @@ class PhydrusModelInit():
         ml = self.ml
         node_dict = ml.read_obs_node()
         depth_to_requested_column = {}
-        print("Node dict: ",node_dict)
         depths = self.static_config['DEPTHS']
         for index, value in enumerate(node_dict.values()):
             depth_to_requested_column[depths[index]] = value[column_name]
