@@ -68,6 +68,8 @@ class NitrateOptimizer():
         node_info = self.phydrus.ml.read_nod_inf(times=[self.static_configuration["n_hours"]])
         self.static_configuration["initial_wc_distribution"] = node_info["Moisture"]
         self.static_configuration["initial_conc_distribution"] = node_info["Conc(1..NS)"]
+        print("Initial Water Content Distribution (Moisture):", self.static_configuration["initial_wc_distribution"])
+        print("\nInitial Concentration Distribution:", self.static_configuration["initial_conc_distribution"])
         self.static_configuration["auto_wc_and_NO3"] = False
 
     def update_past_data_file(self):
@@ -152,7 +154,7 @@ class NitrateOptimizer():
 
         # Adjust irrigation based on water content at 30cm depth
         if avg_wc_20cm < 0.2:  # Too dry
-            precipitation = 2
+            precipitation = 4
         elif avg_wc_20cm > 0.32:  # Too wet
             precipitation = 0.2
         else:
@@ -160,7 +162,7 @@ class NitrateOptimizer():
 
         # Adjust fertigation based on nitrate concentration
         if avg_nitrate_20cm < 30:
-            fertigation = 150  # Increase nitrogen
+            fertigation = 90  # Increase nitrogen
         elif avg_nitrate_20cm > 70:
             fertigation = 10  # Reduce nitrogen
         else:
