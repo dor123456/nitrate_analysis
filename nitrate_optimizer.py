@@ -12,13 +12,41 @@ and the amount of fertigation to set initial parameters to run the next step.
 """
 
 
-
+import random
+import math
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import os
 from phydrus_model_initializer import DynamicConfig, PhydrusModelInit
 from static_configuration import static_config
+
+
+def grow_linear_stay_at_max(min, max, step_until_max, length):
+        """
+        Returns a numpy array that grows linearly from min to max for 
+        step_until_max steps and then stays at the max
+        """
+        return np.concatenate((np.linspace(min, max, step_until_max), np.full(length-step_until_max, max)))
+
+def transpiration_calculation(LAI, k=1):
+    """
+    Returns the transpiration frac from the LAI and k
+    """
+    return 1 - math.exp(-k*LAI)
+
+def get_ET_values(excel_filepath="ET_Ovdat.csv", column_name="ET"):
+    # Read the Csv file into a DataFrame
+    df = pd.read_csv(excel_filepath)
+
+    # Check if the column exists
+    if column_name not in df.columns:
+        raise ValueError(f"Column '{column_name}' not found in the Excel file.")
+
+    df[column_name] = df[column_name] / 10 # convert mm to cm
+
+    # Return the values of the specified column as a list
+    return np.array(df[column_name].tolist())
 
 class NitrateOptimizer():
     past_days_data_file = "water_content_and_fertigation_history.csv"
@@ -28,7 +56,11 @@ class NitrateOptimizer():
     max_step = 80
     phydrus = None
     irigation_fertigation_log = []
-
+    plant_growing_time = 40
+    simulation_changing_params = {"croot_max_list" : grow_linear_stay_at_max(0, 100, plant_growing_time, max_step), #croot max gradually increasing in first plant growing time days and then stays at max
+                                  "transpiration_frac_list" : np.array([transpiration_calculation(LAI) for LAI in grow_linear_stay_at_max(0, 1, plant_growing_time, max_step)]),
+                                  "ET_list" : get_ET_values()}
+                                  
     def __init__(self, static_configuration = static_config, dynamic_configuration = DynamicConfig()):
         self.static_configuration = static_configuration
         self.dynamic_configuration = dynamic_configuration
@@ -42,7 +74,11 @@ class NitrateOptimizer():
 
 
     def run(self):
+        """
+        Runs the whole simulation from start to finish after inisialization
+        """
         self.clear_past_days_data()
+        self.update_config_changing_params(0)
         while self.current_step < self.max_step:
             self.step()
             self.current_step += 1
@@ -50,6 +86,9 @@ class NitrateOptimizer():
         print(self.irigation_fertigation_log)
 
     def step(self):
+        """
+        Runs one step out of the simulation
+        """
         phydrus= PhydrusModelInit(self.dynamic_configuration, self.static_configuration)
         self.phydrus = phydrus
         self.update_init_params()
@@ -61,6 +100,18 @@ class NitrateOptimizer():
     def compute_cost_function(self):
         return 0
     
+    def update_config_changing_params(self, step):
+        """
+        Updates the static configuration by the changing params for the step given
+        (The params that dont rely on yesterday params but change through time) 
+        """
+        # self.static_configuration["transpiration_frac"] = self.simulation_changing_params["transpiration_frac_list"][step]
+        # self.static_configuration["croot_max"] = self.simulation_changing_params["croot_max_list"][step]
+        # self.static_configuration["daily_et"] = self.simulation_changing_params["ET_list"][step]
+        print(self.static_configuration["transpiration_frac"])
+        print(self.static_configuration["croot_max"])
+        print(self.static_configuration["daily_et"])
+
     def update_init_params(self):
         """
         update the next steps initial params based on the previous steps output
@@ -71,8 +122,13 @@ class NitrateOptimizer():
         print("Initial Water Content Distribution (Moisture):", self.static_configuration["initial_wc_distribution"])
         print("\nInitial Concentration Distribution:", self.static_configuration["initial_conc_distribution"])
         self.static_configuration["auto_wc_and_NO3"] = False
+        exit()
+        self.update_config_changing_params(self.current_step+1) # the changing params of next step
 
     def update_past_data_file(self):
+        """
+        Save the important information to our csv log in past_days_data_file
+        """
         water_content = self.phydrus.get_node_info(column_name="theta")
         concentration = self.phydrus.get_node_info(column_name='Conc')
         soil_data = {

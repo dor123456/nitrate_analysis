@@ -27,7 +27,6 @@ static_config = {
     "irrigation_func": lambda daily_et, leaching_fraction: daily_et * leaching_fraction,
     "precipitation_interval": lambda n_days: [6 + (i * 24) for i in range(n_days)],  # hours in which precipitation occurs
     "transpiration_frac": 0.3,
-    "evaporation_frac": 0.7,
     
     # Material information
     "l": -0.5,
