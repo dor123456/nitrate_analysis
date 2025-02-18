@@ -9,7 +9,7 @@ static_config = {
     "initial_wc_40": 0.3,
     "auto_wc_and_NO3": True,
     "initial_wc_distribution": lambda resid_wc, wc_10, wc_40, sat_wc, profile: np.concatenate((np.linspace(3*resid_wc, wc_10, 10), np.linspace(wc_10, wc_40, 30), np.linspace(wc_40, 0.9*sat_wc, len(profile)-40))),
-    "initial_conc": 10,
+    "initial_conc": 70,
     "initial_conc_distribution": lambda initial_conc, profile: np.full(len(profile), initial_conc), # finish this for starting stage 
     "croot_max": 40,
     "top": 0,  # depth of surface

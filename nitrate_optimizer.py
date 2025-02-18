@@ -11,7 +11,7 @@ and the amount of fertigation to set initial parameters to run the next step.
 
 """
 
-
+from simple_pid import PID
 import random
 import math
 import matplotlib.pyplot as plt
@@ -53,12 +53,16 @@ class NitrateOptimizer():
     static_configuration = None
     dynamic_configuration = None
     current_step = 0
-    max_step = 80
+    max_step = 100
     phydrus = None
+    pid = None
     irigation_fertigation_log = []
     plant_growing_time = 40
-    simulation_changing_params = {"croot_max_list" : grow_linear_stay_at_max(0, 100, plant_growing_time, max_step), #croot max gradually increasing in first plant growing time days and then stays at max
-                                  "transpiration_frac_list" : np.array([transpiration_calculation(LAI) for LAI in grow_linear_stay_at_max(0, 1, plant_growing_time, max_step)]),
+    big_change_counter = 5
+    alpha_nit = 0.15
+    fertigation = 20
+    simulation_changing_params = {"croot_max_list" : grow_linear_stay_at_max(0, 100, plant_growing_time, max_step+1), #croot max gradually increasing in first plant growing time days and then stays at max
+                                  "transpiration_frac_list" : np.array([transpiration_calculation(LAI) for LAI in grow_linear_stay_at_max(0, 1, plant_growing_time, max_step+1)]),
                                   "ET_list" : get_ET_values()}
                                   
     def __init__(self, static_configuration = static_config, dynamic_configuration = DynamicConfig()):
@@ -79,6 +83,11 @@ class NitrateOptimizer():
         """
         self.clear_past_days_data()
         self.update_config_changing_params(0)
+
+        # self.pid = PID(Kp=0.5, Ki=0.1, Kd=0.05, setpoint=40.0)
+        # self.pid.output_limits = (0, 100)  # Limit fertigation between 0 and 10 liters
+
+
         while self.current_step < self.max_step:
             self.step()
             self.current_step += 1
@@ -105,9 +114,9 @@ class NitrateOptimizer():
         Updates the static configuration by the changing params for the step given
         (The params that dont rely on yesterday params but change through time) 
         """
-        # self.static_configuration["transpiration_frac"] = self.simulation_changing_params["transpiration_frac_list"][step]
-        # self.static_configuration["croot_max"] = self.simulation_changing_params["croot_max_list"][step]
-        # self.static_configuration["daily_et"] = self.simulation_changing_params["ET_list"][step]
+        self.static_configuration["transpiration_frac"] = self.simulation_changing_params["transpiration_frac_list"][step]
+        self.static_configuration["croot_max"] = self.simulation_changing_params["croot_max_list"][step]
+        self.static_configuration["daily_et"] = self.simulation_changing_params["ET_list"][step]
         print(self.static_configuration["transpiration_frac"])
         print(self.static_configuration["croot_max"])
         print(self.static_configuration["daily_et"])
@@ -122,7 +131,6 @@ class NitrateOptimizer():
         print("Initial Water Content Distribution (Moisture):", self.static_configuration["initial_wc_distribution"])
         print("\nInitial Concentration Distribution:", self.static_configuration["initial_conc_distribution"])
         self.static_configuration["auto_wc_and_NO3"] = False
-        exit()
         self.update_config_changing_params(self.current_step+1) # the changing params of next step
 
     def update_past_data_file(self):
@@ -160,7 +168,7 @@ class NitrateOptimizer():
         # Get last `n_days` of data
         return df.tail(n_days)
 
-    def plot_nitrate_concentration(self, goal_column="Conc_20", goal_value=40):
+    def plot_nitrate_concentration(self, goal_column="Conc_10", goal_value=40):
         """
         Plots nitrate concentration over time at a given soil depth.
         
@@ -198,35 +206,32 @@ class NitrateOptimizer():
         Decide how much precipitation and fertigation to apply
         based on past water content and nitrate concentration.
         """
-        past_data = self.load_past_data(1)  # Use last 3 days for decision-making
+        past_data = self.load_past_data(8)  # Use last 3 days for decision-making
+        precipitation = 0.4  # Normal irrigation
+        # Example logic: 
+        avg_nitrate_10cm = past_data["Conc_10"].ewm(span=4, adjust=False).mean().iloc[-1]
+        #self.alpha_nit *= 0.97
+        
+        above_40 = (past_data["Conc_10"] > 40).sum()  # Count how many are above 40
+        if above_40 == len(past_data["Conc_10"]) or above_40 == 0:
+            self.alpha_nit += 0.2
+        elif above_40 == len(past_data["Conc_10"])//2:
+            self.alpha_nit -= 0.2
+        print(self.alpha_nit)
+        
 
-        if past_data is None or past_data.empty:
-            print("No past data available, using default irrigation.")
-            return 0.5, 40  # Default values for precipitation (mm) and fertigation (kg/ha)
 
-        # Example logic:
-        avg_wc_20cm = past_data["WC_20"].mean()
-        avg_nitrate_20cm = past_data["Conc_20"].mean()
-
-        # Adjust irrigation based on water content at 30cm depth
-        if avg_wc_20cm < 0.2:  # Too dry
-            precipitation = 4
-        elif avg_wc_20cm > 0.32:  # Too wet
-            precipitation = 0.2
-        else:
-            precipitation = 0.8  # Normal irrigation
-
-        # Adjust fertigation based on nitrate concentration
-        if avg_nitrate_20cm < 30:
-            fertigation = 90  # Increase nitrogen
-        elif avg_nitrate_20cm > 70:
-            fertigation = 10  # Reduce nitrogen
-        else:
-            fertigation = 80 # Normal fertigation
-
-        self.dynamic_configuration["precipitation"] = precipitation
+        error = avg_nitrate_10cm - 40
+        if self.big_change_counter != 0:
+            fertigation = max(0,self.fertigation - self.alpha_nit * error)
+            self.fertigation =fertigation
+            self.big_change_counter -= 1
+        else: # big_change_counter == 0
+            fertigation = max(0,self.fertigation - 10*self.alpha_nit * error)
+            self.big_change_counter = 5
         self.dynamic_configuration["fertigation_conc"] = fertigation
-        return precipitation, fertigation
+        self.dynamic_configuration["precipitation"] = precipitation
+        return precipitation, fertigation, self.alpha_nit, error
 
 
 if __name__ == "__main__":

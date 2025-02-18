@@ -70,7 +70,7 @@ class PhydrusModelInit():
         ET = np.zeros(24)
         ET[7:18] = daily_ET/(18-7)
         transpiration = self.static_config["transpiration_frac"] * ET
-        evaporation = 1 - transpiration
+        evaporation = (1 - transpiration) * ET
         # Create the DataFrame with repeated values
         return pd.DataFrame({
             'hour': hours,
@@ -124,7 +124,7 @@ class PhydrusModelInit():
             profile['Conc'] = self.static_config["initial_conc_distribution"](self.static_config["initial_conc"], profile)
         else:
             profile['h'] = self.static_config["initial_wc_distribution"]
-            profile['Conc'] = self.static_config["initial_conc"]
+            profile['Conc'] = self.static_config["initial_conc_distribution"]
         print(profile['h'])
         root_distribution = self.static_config["root_distribution"](self.dynamic_config["root_depth"])
         profile['Beta'] = self.static_config["root_distribution_fill"](root_distribution, profile) # define root distribution in profile df

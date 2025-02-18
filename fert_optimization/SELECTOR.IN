@@ -54,7 +54,7 @@ tPulse
 1
 *** BLOCK G: ROOT WATER UPTAKE INFORMATION ***************************************
 iMoSink cRootMax OmegaC 
-0    40    0.5
+0    100.0    0.5
 P0 P2H P2L P3 r2H r2L 
 -10    -400    -600    -8000    0.02    0.004
 POptm(1),POptm(2),...,POptm(NMat)
