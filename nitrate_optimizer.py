@@ -35,9 +35,9 @@ def transpiration_calculation(LAI, k=1):
     """
     return 1 - math.exp(-k*LAI)
 
-def get_ET_values(excel_filepath="ET_Ovdat.csv", column_name="ET"):
+def get_ET_values(filepath="ET_Ovdat.csv", column_name="ET"):
     # Read the Csv file into a DataFrame
-    df = pd.read_csv(excel_filepath)
+    df = pd.read_csv(filepath)
 
     # Check if the column exists
     if column_name not in df.columns:
@@ -53,7 +53,7 @@ class NitrateOptimizer():
     static_configuration = None
     dynamic_configuration = None
     current_step = 0
-    max_step = 100
+    max_step = 240
     phydrus = None
     pid = None
     irigation_fertigation_log = []
@@ -63,11 +63,16 @@ class NitrateOptimizer():
     fertigation = 20
     simulation_changing_params = {"croot_max_list" : grow_linear_stay_at_max(0, 100, plant_growing_time, max_step+1), #croot max gradually increasing in first plant growing time days and then stays at max
                                   "transpiration_frac_list" : np.array([transpiration_calculation(LAI) for LAI in grow_linear_stay_at_max(0, 1, plant_growing_time, max_step+1)]),
-                                  "ET_list" : get_ET_values()}
+                                  "ET_list" : get_ET_values(filepath="ET_Ovdat_long.csv")}
                                   
     def __init__(self, static_configuration = static_config, dynamic_configuration = DynamicConfig()):
         self.static_configuration = static_configuration
         self.dynamic_configuration = dynamic_configuration
+        
+        # Start out pid algorithm for choosing fertigation levels
+        self.pid = PID(Kp=0.4, Ki=0.07, Kd=0.25, setpoint=40.0)
+        self.pid.output_limits = (-100, 100)  # Limit fertigation between 0 and 10 liters
+
 
     def clear_past_days_data(self):
         # Read the header of the CSV file without loading the data
@@ -84,13 +89,10 @@ class NitrateOptimizer():
         self.clear_past_days_data()
         self.update_config_changing_params(0)
 
-        # self.pid = PID(Kp=0.5, Ki=0.1, Kd=0.05, setpoint=40.0)
-        # self.pid.output_limits = (0, 100)  # Limit fertigation between 0 and 10 liters
-
-
         while self.current_step < self.max_step:
             self.step()
             self.current_step += 1
+
         self.plot_nitrate_concentration()
         print(self.irigation_fertigation_log)
 
@@ -202,38 +204,22 @@ class NitrateOptimizer():
         plt.show()
 
     def decide_irrigation_and_fertigation(self):
-        """
-        Decide how much precipitation and fertigation to apply
-        based on past water content and nitrate concentration.
-        """
-        past_data = self.load_past_data(8)  # Use last 3 days for decision-making
-        precipitation = 0.4  # Normal irrigation
-        # Example logic: 
-        avg_nitrate_10cm = past_data["Conc_10"].ewm(span=4, adjust=False).mean().iloc[-1]
-        #self.alpha_nit *= 0.97
-        
-        above_40 = (past_data["Conc_10"] > 40).sum()  # Count how many are above 40
-        if above_40 == len(past_data["Conc_10"]) or above_40 == 0:
-            self.alpha_nit += 0.2
-        elif above_40 == len(past_data["Conc_10"])//2:
-            self.alpha_nit -= 0.2
-        print(self.alpha_nit)
-        
-
-
-        error = avg_nitrate_10cm - 40
-        if self.big_change_counter != 0:
-            fertigation = max(0,self.fertigation - self.alpha_nit * error)
-            self.fertigation =fertigation
-            self.big_change_counter -= 1
-        else: # big_change_counter == 0
-            fertigation = max(0,self.fertigation - 10*self.alpha_nit * error)
-            self.big_change_counter = 5
-        self.dynamic_configuration["fertigation_conc"] = fertigation
+        past_data = self.load_past_data(1)  # Use last 3 days for decision-making
+        # Every 60 days set the precipitation to be 1.5 times that day's ET to count for different seasons
+        precipitation = self.simulation_changing_params["ET_list"][self.current_step//60] * 1.5 
+        calculated_error = self.pid(past_data["Conc_10"].iloc[0])
+        self.fertigation = max(0,self.fertigation + calculated_error)
+        self.dynamic_configuration["fertigation_conc"] = self.fertigation
         self.dynamic_configuration["precipitation"] = precipitation
-        return precipitation, fertigation, self.alpha_nit, error
+        return precipitation, self.fertigation, calculated_error
 
 
 if __name__ == "__main__":
-    simulation = NitrateOptimizer()
+    dynamic_config = DynamicConfig()
+    dynamic_config["h_conductivity"] = 30
+    dynamic_config["resid_wc"] = 0.04
+    dynamic_config["sat_wc"] = 0.32
+    dynamic_config["alpha"] = 0.15
+    dynamic_config["n_empiric"] = 2.1
+    simulation = NitrateOptimizer(dynamic_configuration=dynamic_config)
     simulation.run()
