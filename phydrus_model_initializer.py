@@ -10,17 +10,22 @@ class DynamicConfig(UserDict):
     # Example usages
     default_config = {
         # soil variables
-        "h_conductivity" : 18, # calculated initial value
-        "resid_wc" : 0.02, # calculated initial value
-        "sat_wc" : 0.38, # calculated initial value
-        "alpha" : 0.1005,
-        "n_empiric" : 1.7889,
+        # "h_conductivity" : 18, # calculated initial value
+        # "resid_wc" : 0.02, # calculated initial value
+        # "sat_wc" : 0.38, # calculated initial value
+        # "alpha" : 0.1005,
+        # "n_empiric" : 1.7889,
+        "h_conductivity": 14.5917,   # Hydraulic conductivity
+        "resid_wc": 0.057,           # Residual water content
+        "sat_wc": 0.41,              # Saturated water content
+        "alpha": 0.124,              # Alpha parameter (1/cm)
+        "n_empiric": 2.28,           # Empirical n parameter
         # plant variables
         "root_depth" : 20,
         "leaching_fraction" : 1,
         #precipitaion
         "precipitation" : 0.5, # calculated initial value
-        "fertigation_conc" : 1,
+        "fertigation_conc" : 40,
     }
     
     def __init__(self, defaults=default_config):
@@ -92,6 +97,7 @@ class PhydrusModelInit():
         atm['rSoil'] = ET['evaporation']
         atm['rRoot'] = ET['transpiration']
         atm['hCritA'] = 1000000 # random big number (???)
+        atm['cBot'] = 0.3
 
         if self.dynamic_config["precipitation"]:
             self.add_real_precipitation(atm)
@@ -141,7 +147,8 @@ class PhydrusModelInit():
         ml.add_obs_nodes(self.static_config["DEPTHS"]) # to check if possible to add two depth 10 and 20 cm
         self.add_atm_pressure()
         self.add_solute()
-        ml.add_root_uptake(model=self.static_config["FEDES_ET_AL"], crootmax=self.static_config["croot_max"], p0=self.static_config["p0"], p2h=self.static_config["p2h"], p2l=self.static_config["p2l"], p3=self.static_config["p3"], r2h=self.static_config["r2h"], r2l=self.static_config["r2l"], poptm=self.static_config["poptm"]) # model=Feddes, define Cmax, paramters for tomato from hydrus library 
+        ml.add_root_uptake(model=self.static_config["FEDES_ET_AL"], crootmax=self.static_config["croot_max"], p0=self.static_config["p0"], p2h=self.static_config["p2h"], p2l=self.static_config["p2l"], p3=self.static_config["p3"], r2h=self.static_config["r2h"], r2l=self.static_config["r2l"], poptm=self.static_config["poptm"], lActiveU=self.static_config["lActiveU"],
+                           active_vars=self.static_config["active_uptake_vars"]) # model=Feddes, define Cmax, paramters for tomato from hydrus library 
         ml.write_input()
         print("MODEL INITIALIZED")
 

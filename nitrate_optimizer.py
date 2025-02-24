@@ -50,25 +50,20 @@ def get_ET_values(filepath="ET_Ovdat.csv", column_name="ET"):
 
 class NitrateOptimizer():
     past_days_data_file = "water_content_and_fertigation_history.csv"
-    static_configuration = None
-    dynamic_configuration = None
-    current_step = 0
-    max_step = 240
-    phydrus = None
-    pid = None
-    irigation_fertigation_log = []
-    plant_growing_time = 40
-    big_change_counter = 5
-    alpha_nit = 0.15
-    fertigation = 20
+    max_step = 65
+    plant_growing_time = 60
     simulation_changing_params = {"croot_max_list" : grow_linear_stay_at_max(0, 100, plant_growing_time, max_step+1), #croot max gradually increasing in first plant growing time days and then stays at max
                                   "transpiration_frac_list" : np.array([transpiration_calculation(LAI) for LAI in grow_linear_stay_at_max(0, 1, plant_growing_time, max_step+1)]),
-                                  "ET_list" : get_ET_values(filepath="ET_Ovdat_long.csv")}
+                                  "ET_list" : get_ET_values()} # filepath="ET_Ovdat_long.csv")}
                                   
-    def __init__(self, static_configuration = static_config, dynamic_configuration = DynamicConfig()):
+    def __init__(self, static_configuration = static_config, dynamic_configuration = DynamicConfig(), static_fertigation=False):
         self.static_configuration = static_configuration
         self.dynamic_configuration = dynamic_configuration
-        
+        self.static_fertigation = static_fertigation
+        self.current_step = 0
+        self.phydrus = None
+        self.irrigation_fertigation_log = []
+        self.fertigation = 40
         # Start out pid algorithm for choosing fertigation levels
         self.pid = PID(Kp=0.4, Ki=0.07, Kd=0.25, setpoint=40.0)
         self.pid.output_limits = (-100, 100)  # Limit fertigation between 0 and 10 liters
@@ -93,8 +88,8 @@ class NitrateOptimizer():
             self.step()
             self.current_step += 1
 
-        self.plot_nitrate_concentration()
-        print(self.irigation_fertigation_log)
+        self.create_all_plots()
+        print(self.irrigation_fertigation_log)
 
     def step(self):
         """
@@ -105,8 +100,10 @@ class NitrateOptimizer():
         self.update_init_params()
         self.update_past_data_file()
         self.compute_cost_function()
-        irrigation_fertigation = self.decide_irrigation_and_fertigation()
-        self.irigation_fertigation_log.append(irrigation_fertigation)
+        if not self.static_fertigation:
+            self.decide_irrigation_and_fertigation()
+        irrigation_fertigation = (self.dynamic_configuration["precipitation"], self.dynamic_configuration["fertigation_conc"])
+        self.irrigation_fertigation_log.append(irrigation_fertigation)
 
     def compute_cost_function(self):
         return 0
@@ -141,6 +138,8 @@ class NitrateOptimizer():
         """
         water_content = self.phydrus.get_node_info(column_name="theta")
         concentration = self.phydrus.get_node_info(column_name='Conc')
+        cv_root = self.phydrus.get_cvRoot()
+        print("cvroot last: " + str(cv_root))
         soil_data = {
             "Step" : [self.current_step],
             "WC_10" : [water_content[-10].iloc[-1]],
@@ -148,7 +147,8 @@ class NitrateOptimizer():
             "WC_40" : [water_content[-40].iloc[-1]],
             "Conc_10" : [concentration[-10].iloc[-1]],
             "Conc_20" : [concentration[-20].iloc[-1]],
-            "Conc_40" : [concentration[-40].iloc[-1]]
+            "Conc_40" : [concentration[-40].iloc[-1]],
+            "NO3_uptake" : [cv_root.iloc[-1]["Sum(cvRoot)"]]
         }
         df = pd.DataFrame(soil_data)
     
@@ -169,6 +169,16 @@ class NitrateOptimizer():
 
         # Get last `n_days` of data
         return df.tail(n_days)
+
+    def decide_irrigation_and_fertigation(self):
+        past_data = self.load_past_data(1)  # Use last 3 days for decision-making
+        # Every 60 days set the precipitation to be 1.5 times that day's ET to count for different seasons
+        precipitation = self.simulation_changing_params["ET_list"][self.current_step//60] * 1.5 
+        calculated_error = self.pid(past_data["Conc_10"].iloc[0])
+        self.fertigation = max(0,self.fertigation + calculated_error)
+        self.dynamic_configuration["fertigation_conc"] = self.fertigation
+        self.dynamic_configuration["precipitation"] = precipitation 
+        return precipitation, self.fertigation
 
     def plot_nitrate_concentration(self, goal_column="Conc_10", goal_value=40):
         """
@@ -200,26 +210,85 @@ class NitrateOptimizer():
         plt.legend()
         plt.grid(True)
 
-        # Show the plot
-        plt.show()
 
-    def decide_irrigation_and_fertigation(self):
-        past_data = self.load_past_data(1)  # Use last 3 days for decision-making
-        # Every 60 days set the precipitation to be 1.5 times that day's ET to count for different seasons
-        precipitation = self.simulation_changing_params["ET_list"][self.current_step//60] * 1.5 
-        calculated_error = self.pid(past_data["Conc_10"].iloc[0])
-        self.fertigation = max(0,self.fertigation + calculated_error)
-        self.dynamic_configuration["fertigation_conc"] = self.fertigation
-        self.dynamic_configuration["precipitation"] = precipitation
-        return precipitation, self.fertigation, calculated_error
+    def plot_fertigation_graphs(self):
+        # Define step indices
+        steps = range(len(self.irrigation_fertigation_log))
+
+        df = pd.read_csv(self.past_days_data_file)
+
+        print("NO3_uptake: ", df["NO3_uptake"])
+
+        cumulative_no3_uptake = np.cumsum(df["NO3_uptake"])
+        # Calculate irrigation * fertigation values
+        no3_applied = [irrigation * fertigation for irrigation, fertigation in self.irrigation_fertigation_log] # given in 10*mg/m**2 == (cm*m**2/m**2 * mg/((0.1m)**3))
+
+        # Compute cumulative sum
+        cumulative_no3_applied = np.cumsum(no3_applied)
+
+        NUE = cumulative_no3_uptake/cumulative_no3_applied
+
+        # Plotting
+        fig, ax = plt.subplots(4, 1, figsize=(10, 8))
+
+        # First graph: irrigation * fertigation
+        ax[0].plot(steps, no3_applied, marker='o', linestyle='-', color='b', label='Irrigation × Fertigation')
+        ax[0].set_title('Irrigation × Fertigation Over Time')
+        ax[0].set_xlabel('Step')
+        ax[0].set_ylabel('Irrigation × Fertigation (10 mg/m**2)')
+        ax[0].legend()
+        ax[0].grid()
+
+        # Second graph: cumulative sum
+        ax[1].plot(steps, cumulative_no3_applied, marker='o', linestyle='-', color='r', label='Cumulative Sum')
+        ax[1].set_title('Cumulative Sum of Irrigation × Fertigation')
+        ax[1].set_xlabel('Step')
+        ax[1].set_ylabel('Cumulative Sum')
+        ax[1].legend()
+        ax[1].grid()
+
+        # Third graph: NUE
+        ax[2].plot(steps, NUE, marker='o', linestyle='-', color='g', label='NUE')
+        ax[2].set_title('Nitrogen Use Efficiency (NUE) Over Time')
+        ax[2].set_xlabel('Step')
+        ax[2].set_ylabel('NUE (NO3 uptake / input)')
+        ax[2].legend()
+        ax[2].grid()
+
+        # Forth graph CvRoot
+        ax[3].plot(steps, cumulative_no3_uptake, marker='o', linestyle='-', color='purple', label='CvRoot')
+        ax[3].set_title('Root Nitrogen uptake Over Time')
+        ax[3].set_xlabel('Step')
+        ax[3].set_ylabel('Root NO3 uptake')
+        ax[3].legend()
+        ax[3].grid()
+
+        plt.tight_layout()
 
 
-if __name__ == "__main__":
+    def create_all_plots(self):
+        self.plot_nitrate_concentration()
+        self.plot_fertigation_graphs()
+
+def set_dynamic_config():
     dynamic_config = DynamicConfig()
-    dynamic_config["h_conductivity"] = 30
+    dynamic_config["h_conductivity"] = 5
     dynamic_config["resid_wc"] = 0.04
     dynamic_config["sat_wc"] = 0.32
     dynamic_config["alpha"] = 0.15
     dynamic_config["n_empiric"] = 2.1
-    simulation = NitrateOptimizer(dynamic_configuration=dynamic_config)
-    simulation.run()
+    dynamic_config["fertigation_conc"] = 40
+    dynamic_config["precipitation"] = 0.4
+    return dynamic_config
+
+if __name__ == "__main__":
+    
+    dynamic_config = set_dynamic_config()
+    simulation_PID = NitrateOptimizer(dynamic_configuration=dynamic_config)
+    simulation_PID.run()
+    
+    dynamic_config = set_dynamic_config()
+    simulation_static_fert = NitrateOptimizer(dynamic_configuration=dynamic_config, static_fertigation=True)
+    simulation_static_fert.run()
+
+    plt.show() 

@@ -11,7 +11,7 @@ from collections import UserDict
 from typing import List
 from phydrus_model_initializer import DynamicConfig, PhydrusModelInit
 # from static_configuration import static_config
-from midrasha_soil_static_config import static_config
+from static_configuration import static_config
 from scipy.optimize import minimize, least_squares
 import io
 import sys
@@ -230,6 +230,8 @@ if __name__ == "__main__":
     # get_solute_variables()
     dynamic_config = DynamicConfig()
     phy_ml = PhydrusModelInit(dynamic_config, static_config)
+    df = phy_ml.get_cvRoot()
+    print(df)
     # phy_ml.ml.read_nod_inf()
     # print(phy_ml.get_theta())
     # phy_ml.get_theta()

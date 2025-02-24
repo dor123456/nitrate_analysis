@@ -9,9 +9,9 @@ static_config = {
     "initial_wc_40": 0.3,
     "auto_wc_and_NO3": True,
     "initial_wc_distribution": lambda resid_wc, wc_10, wc_40, sat_wc, profile: np.concatenate((np.linspace(3*resid_wc, wc_10, 10), np.linspace(wc_10, wc_40, 30), np.linspace(wc_40, 0.9*sat_wc, len(profile)-40))),
-    "initial_conc": 70,
+    "initial_conc": 20,
     "initial_conc_distribution": lambda initial_conc, profile: np.full(len(profile), initial_conc), # finish this for starting stage 
-    "croot_max": 40,
+    "croot_max": 0,
     "top": 0,  # depth of surface
     "bottom": -49,  # depth of bottom in cm
     "dx": 1,
@@ -22,6 +22,7 @@ static_config = {
     "n_days": 1,  # choose between 1 to 31
     "n_hours": 24 * 1,
     "atm_columns": ["tAtm", "Prec", "rSoil", "rRoot", "hCritA", "rB", "hB", "ht", "tTop", "tBot", "Ampl", "cTop", "cBot"],
+    "cBot" : 12,
     "PREC": 1,
     "CTOP": 11,
     "irrigation_func": lambda daily_et, leaching_fraction: daily_et * leaching_fraction,
@@ -30,11 +31,11 @@ static_config = {
     
     # Material information
     "l": -0.5,
-    "nitrate_trans": (1.5, 10, 1, 0), # bulk.d +-0.3 DisperL 10, frac, mobile_wc
+    "nitrate_trans":  (1500, 10, 1, 0), #(1.5, 10, 1, 0), # bulk.d +-0.3 DisperL 10, frac, mobile_wc
 
     # Solute information
     "sol_beta": 1,
-    "sol_difw": 0.068,
+    "sol_difw": 0, # 0.068,
 
     # Waterflow information
     "VAN_GENUCH_6_PARAM": 0,
@@ -56,6 +57,11 @@ static_config = {
     "r2l": 0.004,
     "poptm": [-25],
 
+    "lActiveU" : True,
+
+    "active_uptake_vars" : {'OmegaS':1, 'SPot': 0, 'KM': 0.5, 'cMin': 0, 'OmegaW': 'f', 'iActSolU': 1},
+
     # Observation node
     "DEPTHS": [-10, -20, -40]
+
 }
