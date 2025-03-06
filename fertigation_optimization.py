@@ -10,8 +10,11 @@ import time
 from collections import UserDict
 from typing import List
 from phydrus_model_initializer import DynamicConfig, PhydrusModelInit
+# from static_configuration import static_config
 from static_configuration import static_config
-from scipy.optimize import minimize
+from scipy.optimize import minimize, least_squares
+import io
+import sys
 
 #%%
 # =============================================================================
@@ -69,7 +72,7 @@ def add_relevant_data(final_df : pd.DataFrame, relevant_data : float, input_vari
     print(f"{input_variable}: {var_value}, {output_variable}: {relevant_data}")
     return final_df.append({input_variable: var_value, output_variable : relevant_data}, ignore_index=True)
 
-def create_variable_table(input_variable : str, output_variable : str, start_val : float, end_val : float, jump_val : float) -> pd.DataFrame: 
+def create_variable_table(input_variable : str, output_variable : str, start_val : float, end_val : float, num_of_jumps : float=10) -> pd.DataFrame: 
     """
     Function gets an input variable and output variable and a range in which we iterate over the input variable
     The function plots a graph of the output variable as a function of the input varibale and returns a dataframe with 
@@ -77,7 +80,7 @@ def create_variable_table(input_variable : str, output_variable : str, start_val
     """
     dynamic_config = DynamicConfig()
     final_df = pd.DataFrame({input_variable : [], output_variable : []})
-    for var_value in np.arange(start_val, end_val, jump_val):
+    for var_value in np.linspace(start_val, end_val, num_of_jumps):
         var_value = round(var_value, 2)
         dynamic_config[input_variable]= var_value
         phy_ml = PhydrusModelInit(dynamic_config, static_config)
@@ -99,15 +102,18 @@ def create_variable_table(input_variable : str, output_variable : str, start_val
 # input units: cm, ppm, please note to unit convertion in the output of the script
 
 def create_variable_graphs():
-    print(create_variable_table("h_conductivity", "NUE", 1, 20, 2))
-    print(create_variable_table("resid_wc", "NUE", 0.05, 0.1, (0.1-0.05)/10))
-    print(create_variable_table("sat_wc", "NUE", 0.2, 0.4, (0.4-0.2)/10))
-    print(create_variable_table("alpha", "NUE", 0.075, 0.14, (0.14-0.075)/10))
-    print(create_variable_table("n_empiric", "NUE", 1.89, 2.68, (2.68-1.89)/10))
-    print(create_variable_table("root_depth", "NUE", 10, 30, (30-10)/10))
-    print(create_variable_table("leaching_fraction", "NUE", 0.8, 1.2, (1.2-0.8)/10))
+    print(create_variable_table("h_conductivity", "NUE", 1, 20))
+    print(create_variable_table("resid_wc", "NUE", 0.05, 0.1))
+    print(create_variable_table("sat_wc", "NUE", 0.2, 0.4))
+    print(create_variable_table("alpha", "NUE", 0.075, 0.14))
+    print(create_variable_table("n_empiric", "NUE", 1.89, 2.68))
+    print(create_variable_table("root_depth", "NUE", 10, 30))
+    print(create_variable_table("leaching_fraction", "NUE", 0.8, 1.2))
 
 def create_graphs_from_csv(filenames : List[str] = ["h_conductivity_table.csv", "leaching_fraction_table.csv", "n_empiric_table.csv", "resid_wc_table.csv", "root_depth_table.csv", "sat_wc_table.csv"]) -> None:
+    """
+    gets the filenames of relevant tables and plots them in pretty graphs
+    """
     fig, axs = plt.subplots(nrows=2, ncols=3, figsize=(15, 10))
     axs = axs.flatten()
 
@@ -130,47 +136,109 @@ def create_graphs_from_csv(filenames : List[str] = ["h_conductivity_table.csv", 
 test_theta_interval = [f"11-{i}" for i in range(19, 31)] # 19 to 30 of november
 wc_filename = "cleaned_real_water_content_data.csv"
 
-def get_real_world_theta(depth=static_config["DEPTHS"][0], filename=wc_filename):
+def get_real_world_theta(depths=static_config["DEPTHS"], filename=wc_filename):
     """
-    assuming there is only one depth
+    returns a dict between depths and a df with theta
     """
     real_wc = pd.read_csv(filename)
-    return real_wc[f"wc_B{depth}_mean"]
+    depth_to_theta = {}
+    for depth in depths:
+        real_wc_for_depth  = real_wc[f"wc_B{abs(depth)}_mean"]
+        real_wc_for_depth.index  = real_wc_for_depth.index + 1 # start indexes from 1 not 0 to be like the model
+        depth_to_theta[depth] = real_wc_for_depth
+    print("DEPTH: ")
+    print(depth_to_theta)
+    return depth_to_theta
     
-
+def residual_function(model_wc, real_wc):
+    """
+    calculates the residual cost for all the data points' theta columns
+    for different depths, between the model and the real world
+    """
+    print("REAL WC: ", real_wc)
+    different_depths_resids = []
+    for depth in model_wc.keys():
+        if(len(model_wc[depth]) != len(real_wc[depth])):
+            return [1000000000]
+        print(f"MODEL WC FOR DEPTH {depth}: ", model_wc[depth])
+        print(f"REAL WC FOR DEPTH {depth}:", real_wc[depth])
+        depth_resids = np.abs(model_wc[depth] - real_wc[depth])
+        print("DEPTH_RESIDS: ", depth_resids)
+        different_depths_resids.append(depth_resids)
+    resid = np.concatenate(different_depths_resids)
+    return resid
 def cost_function(model_wc, real_wc):
     """
-    calculates the distance between the columns
+    calculates the sum of the distances between the theta columns for different depths
     """
-    if(len(model_wc) != len(real_wc)):
-        return 1000000000
-    return np.sum(np.abs(model_wc - real_wc))
+    resids = residual_function(model_wc, real_wc)
+    # print(resids)
+    return np.sum(resids)
+
+def valid_input_range(params):
+    """
+    validates the input that it is in allowed range
+    params[0] = alpha
+    params[1] = n_empiric
+    """
+    if 0.036 <= params[0] and params[0] <= 0.145 and 1.37 <= params[1] and params[1] <= 2.68:
+        return True
+    return False
+
+def minimize_resid_function(params):
+    """
+    the resid function the algorithm is supposed to minimize. Receives the parameters of alpha and n_empiric and
+    outputs a list of all the resids between the theta in the real world and in the model
+    """
+    dynamic_config = DynamicConfig()
+    dynamic_config['alpha'] = params[0]
+    dynamic_config['n_empiric'] = params[1]
+    if not valid_input_range(params):
+        return 100000000
+    phy_ml = PhydrusModelInit(dynamic_config, static_config)
+    resids = residual_function(phy_ml.get_node_info(column_name="theta"), get_real_world_theta())
+    cost = np.sum(resids)
+    with open('params_cost_hydro_10.txt', 'a') as fd:
+        fd.write('params: ' + str(params) + " cost: " + str(cost) + "\n")
+    return resids
 
 def minimize_cost_function(params):
-    dynamic_config = DynamicConfig()
-    dynamic_config['h_conductivity'] = params[0]
-    dynamic_config['resid_wc'] = params[1]
-    dynamic_config['sat_wc'] = params[2]
-    dynamic_config['alpha'] = params[3]
-    dynamic_config['n_empiric'] = params[4]
-    phy_ml = PhydrusModelInit(dynamic_config, static_config)
-    return cost_function(phy_ml.get_theta(), get_real_world_theta())
+    """
+    cost function that recieves the params n and alpha and returns the sum of the distances between
+    the theta in all depths in the model and the theta in all the depths in the real world.
+    """
+    resids = minimize_resid_function(params)
+    print(resids)
+    return np.sum(resids)
 
 def get_solute_variables():
-    initial_params_dict = {"h_conductivity" : 1,
-        "resid_wc" : 0.075,
-        "sat_wc" : 0.3,
-        "alpha" : 0.1075,
-        "n_empiric" : 2.285}
-    result = minimize(minimize_cost_function, list(initial_params_dict.values()), options={'disp': True})
+    """
+    The function that runs the logic behing inverse solution for the soil properties in the midrasha.
+    """
+    open("params_cost_hydro_10.txt", "w").close() # erase the ouput file where we write the params and their cost
+    initial_params_dict = {"alpha" : 0.11560592, # 0.036 <= x <= 0.145
+        "n_empiric" : 1.764367} # 1.37 <= x <=2.68   
+    result = minimize(minimize_cost_function, list(initial_params_dict.values()),method="Nelder-Mead",
+    options={'disp': True, 'maxiter': 1000})
+    # result = least_squares(minimize_resid_function, list(initial_params_dict.values()),method="lm",
+    # verbose=2)
     optimized_params_dict = dict(zip(initial_params_dict.keys(), result.x))
     print(optimized_params_dict)
     return optimized_params_dict
 
 if __name__ == "__main__":
-    #create_variable_graphs()
-    #create_graphs_from_csv()
     get_solute_variables()
+    # dynamic_config = DynamicConfig()
+    # phy_ml = PhydrusModelInit(dynamic_config, static_config)
+    # df = phy_ml.get_cvRoot()
+    # print(df)
+    # phy_ml.ml.read_nod_inf()
+    # print(phy_ml.get_theta())
+    # phy_ml.get_theta()
+    # get_real_world_theta()
+    # create_variable_graphs()
+    # create_graphs_from_csv()"""
+    # minimize_resid_function([0.124,2.28])
 
     
 

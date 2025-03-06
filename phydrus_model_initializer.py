@@ -10,16 +10,17 @@ class DynamicConfig(UserDict):
     # Example usages
     default_config = {
         # soil variables
-        "h_conductivity" : 1,
-        "resid_wc" : 0.075,
-        "sat_wc" : 0.3,
-        "alpha" : 0.1075,
-        "n_empiric" : 2.285,
+        "h_conductivity" : 18, # calculated initial value
+        "resid_wc" : 0.02, # calculated initial value
+        "sat_wc" : 0.38, # calculated initial value
+        "alpha" : 0.1005,
+        "n_empiric" : 1.7889,
         # plant variables
         "root_depth" : 20,
         "leaching_fraction" : 1,
         #precipitaion
-        "precipitation" : 0.5
+        "precipitation" : 0.5, # calculated initial value
+        "fertigation_conc" : 40,
     }
     
     def __init__(self, defaults=default_config):
@@ -50,17 +51,17 @@ class PhydrusModelInit():
                     mass_units="M", time_unit="hours", length_unit="mm")
 
     def get_applied_N(self):
-        return self.dynamic_config["precipitation"] * self.static_config["fertigation_conc"] * self.static_config["n_days"]
+        return self.dynamic_config["precipitation"] * self.dynamic_config["fertigation_conc"] * self.static_config["n_days"]
 
     def add_fake_precipitation(self, atm):
         irrigation = self.static_config["irrigation_func"](self.static_config["daily_et"], self.static_config["leaching_fraction"])
         atm.iloc[[self.static_config["precipitation_interval"](self.static_config["n_days"])], self.static_config["PREC"]] = irrigation
-        atm.iloc[[self.static_config["precipitation_interval"](self.static_config["n_days"])], self.static_config["CTOP"]] = self.static_config["fertigation_conc"] #ctop
+        atm.iloc[[self.static_config["precipitation_interval"](self.static_config["n_days"])], self.static_config["CTOP"]] = self.dynamic_config["fertigation_conc"] #ctop
 
     def add_real_precipitation(self, atm):
         irrigation = self.dynamic_config["precipitation"]
         atm.iloc[[self.static_config["precipitation_interval"](self.static_config["n_days"])], self.static_config["PREC"]] = irrigation
-        atm.iloc[[self.static_config["precipitation_interval"](self.static_config["n_days"])], self.static_config["CTOP"]] = self.static_config["fertigation_conc"] #ctop
+        atm.iloc[[self.static_config["precipitation_interval"](self.static_config["n_days"])], self.static_config["CTOP"]] = self.dynamic_config["fertigation_conc"] #ctop
 
     def linear_distribute_ET(self):
         daily_ET = self.static_config["daily_et"]
@@ -69,7 +70,7 @@ class PhydrusModelInit():
         ET = np.zeros(24)
         ET[7:18] = daily_ET/(18-7)
         transpiration = self.static_config["transpiration_frac"] * ET
-        evaporation =self.static_config["evaporation_frac"] * ET
+        evaporation = (1 - transpiration) * ET
         # Create the DataFrame with repeated values
         return pd.DataFrame({
             'hour': hours,
@@ -91,6 +92,7 @@ class PhydrusModelInit():
         atm['rSoil'] = ET['evaporation']
         atm['rRoot'] = ET['transpiration']
         atm['hCritA'] = 1000000 # random big number (???)
+        atm['cBot'] = self.static_config['active_uptake_amount']
 
         if self.dynamic_config["precipitation"]:
             self.add_real_precipitation(atm)
@@ -117,9 +119,15 @@ class PhydrusModelInit():
 
     def create_profile(self):
         ml = self.ml
-        profile = ps.create_profile(top=self.static_config["top"], bot=self.static_config["bottom"],h=self.static_config["hydro_pressure"], conc=self.static_config["conc"], dx = self.static_config["dx"])
-        profile['h'] = self.static_config["initial_wc"]
-        profile['Conc'] = self.static_config["initial_conc"]
+        profile = ps.create_profile(top=self.static_config["top"], bot=self.static_config["bottom"],h=self.static_config["initial_wc_10"], conc=self.static_config["initial_conc"], dx = self.static_config["dx"])
+        if self.static_config["auto_wc_and_NO3"] == True: 
+            # initial_wc_distribution and initial_conc_distribution are given as functions to create a fake initial profile
+            profile['h'] = self.static_config["initial_wc_distribution"](self.dynamic_config["resid_wc"], self.static_config["initial_wc_10"], self.static_config["initial_wc_40"], self.dynamic_config["sat_wc"], profile)
+            profile['Conc'] = self.static_config["initial_conc_distribution"](self.static_config["initial_conc"], profile)
+        else: # initial_wc_distribution and initial_conc_distribution are given as ready profiles and not as functions to create a profile
+            profile['h'] = self.static_config["initial_wc_distribution"]
+            profile['Conc'] = self.static_config["initial_conc_distribution"]
+        print(profile['h'])
         root_distribution = self.static_config["root_distribution"](self.dynamic_config["root_depth"])
         profile['Beta'] = self.static_config["root_distribution_fill"](root_distribution, profile) # define root distribution in profile df
         ml.add_profile(profile)
@@ -127,15 +135,16 @@ class PhydrusModelInit():
     
     def initialize_model(self):
         ml = self.ml
-        ml.add_time_info(tinit=0, tmax=self.static_config["n_hours"], print_times=True) #,dt=10^(-3), dtmin=10^(-7), dtmax=10^(-2))
-        ml.add_waterflow(model=self.static_config["VAN_GENUCH_6_PARAM"],top_bc=self.static_config["ATM_W_SURFACE_RUNOFF"], bot_bc=self.static_config["FREE_DRAINAGE"], linitw=True)
+        ml.add_time_info(tinit=0, tmax=self.static_config["n_hours"], print_times=True) # , dt=10^(-3), dtmin=10^(-7), dtmax=10^(-2))
+        ml.add_waterflow(model=self.static_config["VAN_GENUCH_6_PARAM"],top_bc=self.static_config["ATM_W_SURFACE_LAYER"], bot_bc=self.static_config["SEEPAGE_FACE"], linitw=True)
         ml.add_solute_transport(model=self.static_config["EQ_SOLUTE_TRANPORT"], top_bc=self.static_config["CAUCHY_BOUNDRY_COND"], bot_bc=self.static_config["CONT_CONC_PROFILE"]) #equilibrium model, upper BC - conc flux BC, lower BC = zero conc gradient. 
         self.add_materials()
         self.create_profile()
         ml.add_obs_nodes(self.static_config["DEPTHS"]) # to check if possible to add two depth 10 and 20 cm
         self.add_atm_pressure()
         self.add_solute()
-        ml.add_root_uptake(model=self.static_config["FEDES_ET_AL"], crootmax=self.static_config["croot_max"], p0=self.static_config["p0"], p2h=self.static_config["p2h"], p2l=self.static_config["p2l"], p3=self.static_config["p3"], r2h=self.static_config["r2h"], r2l=self.static_config["r2l"], poptm=self.static_config["poptm"]) # model=Feddes, define Cmax, paramters for tomato from hydrus library 
+        ml.add_root_uptake(model=self.static_config["FEDES_ET_AL"], crootmax=self.static_config["croot_max"], p0=self.static_config["p0"], p2h=self.static_config["p2h"], p2l=self.static_config["p2l"], p3=self.static_config["p3"], r2h=self.static_config["r2h"], r2l=self.static_config["r2l"], poptm=self.static_config["poptm"], lActiveU=self.static_config["lActiveU"],
+                           active_vars=self.static_config["active_uptake_vars"]) # model=Feddes, define Cmax, paramters for tomato from hydrus library 
         ml.write_input()
         print("MODEL INITIALIZED")
 
@@ -147,13 +156,17 @@ class PhydrusModelInit():
         print(solute_levels[["Sum(cvRoot)"]])
         return solute_levels[["Sum(cvRoot)"]] 
 
-    def get_theta(self):
+    def get_node_info(self, column_name="theta"):
+        """
+        returns a dict of depth : pandas df with index column and requested column at that depth
+        """
         ml = self.ml
         node_dict = ml.read_obs_node()
-        # assuming right now that there is only one node
-        theta = list(node_dict.values())[0]["theta"]
-        print(theta) 
-        return theta
+        depth_to_requested_column = {}
+        depths = self.static_config['DEPTHS']
+        for index, value in enumerate(node_dict.values()):
+            depth_to_requested_column[depths[index]] = value[column_name]
+        return depth_to_requested_column
 
     def pretty_show_model(self):
         """forward simulation"""
