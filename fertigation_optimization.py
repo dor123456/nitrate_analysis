@@ -227,11 +227,11 @@ def get_solute_variables():
     return optimized_params_dict
 
 if __name__ == "__main__":
-    # get_solute_variables()
-    dynamic_config = DynamicConfig()
-    phy_ml = PhydrusModelInit(dynamic_config, static_config)
-    df = phy_ml.get_cvRoot()
-    print(df)
+    get_solute_variables()
+    # dynamic_config = DynamicConfig()
+    # phy_ml = PhydrusModelInit(dynamic_config, static_config)
+    # df = phy_ml.get_cvRoot()
+    # print(df)
     # phy_ml.ml.read_nod_inf()
     # print(phy_ml.get_theta())
     # phy_ml.get_theta()
