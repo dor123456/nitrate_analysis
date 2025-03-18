@@ -77,6 +77,8 @@ def create_variable_table(input_variable : str, output_variable : str, start_val
     Function gets an input variable and output variable and a range in which we iterate over the input variable
     The function plots a graph of the output variable as a function of the input varibale and returns a dataframe with 
     with the information as well
+    input - key of dynamic config dictionary paramter (for example h_conductivity)
+    output - NUE - or can be defined through "extract_relevant_data"
     """
     dynamic_config = DynamicConfig()
     final_df = pd.DataFrame({input_variable : [], output_variable : []})
@@ -228,8 +230,8 @@ def get_solute_variables():
 
 if __name__ == "__main__":
     get_solute_variables()
-    # dynamic_config = DynamicConfig()
-    # phy_ml = PhydrusModelInit(dynamic_config, static_config)
+    dynamic_config = DynamicConfig()
+    phy_ml = PhydrusModelInit(dynamic_config, static_config)
     # df = phy_ml.get_cvRoot()
     # print(df)
     # phy_ml.ml.read_nod_inf()
