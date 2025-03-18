@@ -83,10 +83,11 @@ def get_ET_values(filepath="ET_Ovdat.csv", column_name="ET"):
     return np.array(df[column_name].tolist())
 
 class NitrateOptimizer():
-    goal_ppm = 10
+    goal_ppm = 10 # threshold value 
     past_days_data_file = "water_content_and_fertigation_history.csv"
-    max_step = 65
-    plant_growing_time = 60
+    max_step = 65 # number of days 
+    plant_growing_time = 60 # growing period and than platue
+    
     simulation_changing_params = {# "active_uptake_amount_list" : grow_linear_stay_at_max(0,700/plant_growing_time, plant_growing_time, max_step+1), # for linear incalantion in uptake and then stay at max
                                   "active_uptake_amount_list" : estimate_daily_nitrogen_uptake(plant_growing_time, 650, max_step+1), # for sigmoid function inclantion in uptake and then stay at max
                                   "croot_max_list" : grow_linear_stay_at_max(0, 100, plant_growing_time, max_step+1), #croot max gradually increasing in first plant growing time days and then stays at max
