@@ -1,3 +1,5 @@
+git: https://github.com/dor123456/nitrate_analysis
+
 nitrate analysis documentation
 
 phydrus_model_initializer:

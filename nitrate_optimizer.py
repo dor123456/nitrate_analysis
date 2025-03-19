@@ -84,6 +84,8 @@ def get_ET_values(filepath="ET_Ovdat.csv", column_name="ET"):
 
 class NitrateOptimizer():
     goal_ppm = 10 # threshold value 
+    goal_ppm = 10
+    wc_goal = 0.16
     past_days_data_file = "water_content_and_fertigation_history.csv"
     max_step = 65 # number of days 
     plant_growing_time = 60 # growing period and than platue
@@ -102,9 +104,12 @@ class NitrateOptimizer():
         self.phydrus = None
         self.irrigation_fertigation_log = []
         self.fertigation = 40
+        self.precipitation = 0.4
         # Start out pid algorithm for choosing fertigation levels
         self.pid = PID(Kp=0.4, Ki=0.07, Kd=0.625, setpoint=self.goal_ppm)
         self.pid.output_limits = (-100, 100)  # Limit fertigation between 0 and 10 liters
+        self.water_pid = PID(Kp=1, Ki=0.1, Kd=0.05, setpoint=self.wc_goal)
+        self.water_pid.output_limits = (-0.1,0.1)
 
 
     def clear_past_days_data(self):
@@ -163,6 +168,15 @@ class NitrateOptimizer():
 
     def decide_irrigation(self):
         # We take the ET of the past week on average and mutiply it by constant to get the amount of prcipitatio
+        past_data = self.load_past_data(1)  # Use last 1 day for decision-making
+        calculated_error = self.water_pid(past_data["WC_10"].iloc[0])
+        print("calculated error ", calculated_error)
+        self.precipitation = max(0.2,self.precipitation + calculated_error)
+        self.dynamic_configuration["precipitation"] = self.precipitation
+        print("Precipitation:", self.precipitation)
+        return self.precipitation
+        
+    def decide_irrigation_by_et(self):
         et = self.get_weekly_constant_et()
         precipitation = et * 1.2
         self.dynamic_configuration["precipitation"] = precipitation 
@@ -240,11 +254,12 @@ class NitrateOptimizer():
         self.dynamic_configuration["fertigation_conc"] = self.fertigation
         return self.fertigation
     
-    def plot_water_content(self, goal_column="WC_10", goal_value=0.12):
+    def plot_water_content(self, goal_column="WC_10"):
         """
         Plots water content over time at a given soil depth.
         
         """
+        goal_value = self.wc_goal
         # Load the CSV file
         df = pd.read_csv(self.past_days_data_file)
 
