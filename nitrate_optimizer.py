@@ -13,7 +13,6 @@ and the amount of fertigation to set initial parameters to run the next step.
 
 import copy
 from static_configuration import static_config
-
 from simple_pid import PID
 import random
 import math
@@ -56,6 +55,8 @@ def estimate_daily_nitrogen_uptake(total_days, total_nitrogen, max_timestep):
     daily_uptake = np.concatenate([daily_uptake, np.full(max_timestep - total_days, max_uptake)])
 
     return daily_uptake
+
+
 def grow_linear_stay_at_max(min, max, step_until_max, length):
         """
         Returns a numpy array that grows linearly from min to max for 
@@ -83,23 +84,24 @@ def get_ET_values(filepath="ET_Ovdat.csv", column_name="ET"):
     return np.array(df[column_name].tolist())
 
 class NitrateOptimizer():
-    goal_ppm = 10 # threshold value 
-    goal_ppm = 10
+    goal_ppm = 20 # threshold value 
     wc_goal = 0.16
-    past_days_data_file = "water_content_and_fertigation_history.csv"
+    past_days_data_file = "water_content_and_fertigation_history.csv" # csv file for saving the accumulate data of wc and soil conc
     max_step = 65 # number of days 
     plant_growing_time = 60 # growing period and than platue
+    total_N_uptake = 650
     
     simulation_changing_params = {# "active_uptake_amount_list" : grow_linear_stay_at_max(0,700/plant_growing_time, plant_growing_time, max_step+1), # for linear incalantion in uptake and then stay at max
-                                  "active_uptake_amount_list" : estimate_daily_nitrogen_uptake(plant_growing_time, 650, max_step+1), # for sigmoid function inclantion in uptake and then stay at max
+                                  "active_uptake_amount_list" : estimate_daily_nitrogen_uptake(plant_growing_time, total_N_uptake, max_step+1), # for sigmoid function inclantion in uptake and then stay at max
                                   "croot_max_list" : grow_linear_stay_at_max(0, 100, plant_growing_time, max_step+1), #croot max gradually increasing in first plant growing time days and then stays at max
                                   "transpiration_frac_list" : np.array([transpiration_calculation(LAI) for LAI in grow_linear_stay_at_max(0, 1, plant_growing_time, max_step+1)]),
                                   "ET_list" : get_ET_values()} # filepath="ET_Ovdat_long.csv")}
-                                  
-    def __init__(self, static_configuration = static_config, dynamic_configuration = DynamicConfig(), static_fertigation=False):
+                               
+    def __init__(self, static_configuration = static_config, dynamic_configuration = DynamicConfig(), static_fertigation=False, static_irrigation=False):
         self.static_configuration = copy.deepcopy(static_configuration) # dont change original static config
         self.dynamic_configuration = dynamic_configuration
         self.static_fertigation = static_fertigation
+        self.static_irrigation = static_irrigation
         self.current_step = 0
         self.phydrus = None
         self.irrigation_fertigation_log = []
@@ -145,9 +147,13 @@ class NitrateOptimizer():
         self.phydrus = phydrus
         self.update_init_params()
         self.update_past_data_file()
-        self.decide_irrigation()
+        
+        if not self.static_irrigation:
+            self.decide_irrigation()
+            
         if not self.static_fertigation:
             self.decide_fertigation()
+
         irrigation_fertigation = (self.dynamic_configuration["precipitation"], self.dynamic_configuration["fertigation_conc"])
         self.irrigation_fertigation_log.append(irrigation_fertigation)
  
@@ -384,12 +390,11 @@ def set_dynamic_config():
 if __name__ == "__main__":
     
     dynamic_config = set_dynamic_config()
-    simulation_PID = NitrateOptimizer(dynamic_configuration=dynamic_config)
+    simulation_PID = NitrateOptimizer(dynamic_configuration=dynamic_config, static_irrigation=True)
     simulation_PID.run()
     
-    dynamic_config = set_dynamic_config()
-    simulation_static_fert = NitrateOptimizer(dynamic_configuration=dynamic_config, static_fertigation=True)
-    simulation_static_fert.run()
+    # dynamic_config = set_dynamic_config()
+    # simulation_static_fert = NitrateOptimizer(dynamic_configuration=dynamic_config, static_fertigation=True, static_irrigation=True)
+    # simulation_static_fert.run()
     
-
     plt.show() 

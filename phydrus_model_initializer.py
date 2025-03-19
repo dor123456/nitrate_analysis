@@ -70,7 +70,7 @@ class PhydrusModelInit():
         ET = np.zeros(24)
         ET[7:18] = daily_ET/(18-7)
         transpiration = self.static_config["transpiration_frac"] * ET
-        evaporation = (1 - transpiration) * ET
+        evaporation = (1 - self.static_config["transpiration_frac"]) * ET
         # Create the DataFrame with repeated values
         return pd.DataFrame({
             'hour': hours,
