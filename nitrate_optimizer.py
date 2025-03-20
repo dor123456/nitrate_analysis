@@ -23,39 +23,58 @@ import numpy as np
 import os
 from phydrus_model_initializer import DynamicConfig, PhydrusModelInit
 
-
-def estimate_daily_nitrogen_uptake(total_days, total_nitrogen, max_timestep):
+def estimate_nitrate_uptake_linear(nitrate_amount, total_days, start_ratio=0):
     """
-    Estimate daily nitrogen uptake based on total growing time and cumulative nitrogen uptake,
-    and ensure the maximum uptake rate is maintained after the growing period.
-
-    Parameters:
-    - total_days (int): Total growing time in days.
-    - total_nitrogen (float): Total nitrogen absorbed during the growing period (e.g., mmol).
-    - max_timestep (int): The total duration of the simulation (in days).
-
-    Returns:
-    - np.ndarray: Daily nitrogen uptake values for the entire simulation period.
+    Spreads the uptake in a **growing linear** fashion.
+    - start_ratio: The initial uptake fraction (default 0, meaning no uptake at day 0).
     """
-
-    # Sigmoid parameters to shape the uptake curve
-    midpoint = total_days * 0.5  # Day of maximum growth rate (midpoint of the curve)
-    growth_rate = 0.1            # Controls the steepness of the sigmoid curve
-
-    # Generate days array (from 0 to max_timestep)
-    days = np.arange(max_timestep)
-
-    # Sigmoid function to model nitrogen uptake pattern for the growing period
-    uptake_fraction = 1 / (1 + np.exp(-growth_rate * (days[:total_days] - midpoint)))
-
-    # Normalize to ensure the total uptake sums to total_nitrogen for the growing period
-    daily_uptake = (uptake_fraction / np.sum(uptake_fraction)) * total_nitrogen
-
-    # After the growing period, maintain the maximum nitrogen uptake rate
-    max_uptake = daily_uptake[-1]  # Last value of the growing period
-    daily_uptake = np.concatenate([daily_uptake, np.full(max_timestep - total_days, max_uptake)])
-
+    daily_uptake = np.linspace(start_ratio, 2 * nitrate_amount / total_days, total_days)
+    daily_uptake = daily_uptake / np.sum(daily_uptake) * nitrate_amount  # Normalize to sum to nitrate_amount
     return daily_uptake
+
+def estimate_nitrate_uptake_parabolic(nitrate_amount, total_days, a=-1, b=0, c=1, shift=0):
+    """
+    Spreads uptake **up and down like a customizable parabola**.
+    - a, b, c: Coefficients for the quadratic function ax^2 + bx + c.
+    - shift: Shifts the peak of the parabola left or right.
+    """
+    days = np.linspace(-1, 1, total_days) # the parabule is centered around 0 for comfort
+    uptake_pattern = a * (days - shift)**2 + b * (days - shift) + c  # Customizable parabolic shape
+    uptake_pattern = np.maximum(uptake_pattern, 0)  # Ensure non-negative values
+    daily_uptake = uptake_pattern / np.sum(uptake_pattern) * nitrate_amount  # Normalize to sum to nitrate_amount
+    return daily_uptake
+
+def estimate_nitrate_uptake_sigmoid(nitrate_amount, total_days, k=0.1, x0=None, scale=1):
+    """
+    Spreads uptake in a **sigmoid function** pattern.
+    - k: Growth rate of the sigmoid.
+    - x0: Midpoint of the sigmoid curve (defaults to total_days / 2).
+    - L: Maximum value of the sigmoid (scales the shape).
+    - scale: Additional scaling factor to adjust steepness.
+    """
+    if x0 is None:
+        x0 = total_days / 2  # Midpoint of the sigmoid curve
+    days = np.arange(total_days)
+    uptake_pattern = 1 / (1 + np.exp(-k * (days - x0))) * scale
+    daily_uptake = uptake_pattern / np.sum(uptake_pattern) * nitrate_amount  # Normalize to sum to nitrate_amount
+    return daily_uptake
+
+def estimate_nitrate_uptake(nitrate_amount, total_days, method="linear", **kwargs):
+    """
+    General function to estimate nitrogen uptake using a selected method.
+    - method: Choose between "linear", "parabolic", or "sigmoid".
+    - kwargs: Additional parameters specific to each method.
+    """
+    if method == "linear":
+        return estimate_nitrate_uptake_linear(nitrate_amount, total_days, **kwargs)
+    elif method == "parabolic":
+        return estimate_nitrate_uptake_parabolic(nitrate_amount, total_days, **kwargs)
+    elif method == "sigmoid":
+        return estimate_nitrate_uptake_sigmoid(nitrate_amount, total_days, **kwargs)
+    else:
+        raise ValueError("Invalid method. Choose from 'linear', 'parabolic', or 'sigmoid'.")
+
+
 def grow_linear_stay_at_max(min, max, step_until_max, length):
         """
         Returns a numpy array that grows linearly from min to max for 
@@ -83,18 +102,19 @@ def get_ET_values(filepath="ET_Ovdat.csv", column_name="ET"):
     return np.array(df[column_name].tolist())
 
 class NitrateOptimizer():
-    goal_ppm = 10
-    wc_goal = 0.16
+    goal_ppm = 20
+    wc_goal = 0.18
     past_days_data_file = "water_content_and_fertigation_history.csv"
     max_step = 65
     plant_growing_time = 60
+    no3_uptake = 850
     simulation_changing_params = {# "active_uptake_amount_list" : grow_linear_stay_at_max(0,700/plant_growing_time, plant_growing_time, max_step+1), # for linear incalantion in uptake and then stay at max
-                                  "active_uptake_amount_list" : estimate_daily_nitrogen_uptake(plant_growing_time, 650, max_step+1), # for sigmoid function inclantion in uptake and then stay at max
+                                  "active_uptake_amount_list" : None, # for sigmoid function inclantion in uptake and then stay at max
                                   "croot_max_list" : grow_linear_stay_at_max(0, 100, plant_growing_time, max_step+1), #croot max gradually increasing in first plant growing time days and then stays at max
                                   "transpiration_frac_list" : np.array([transpiration_calculation(LAI) for LAI in grow_linear_stay_at_max(0, 1, plant_growing_time, max_step+1)]),
                                   "ET_list" : get_ET_values()} # filepath="ET_Ovdat_long.csv")}
                                   
-    def __init__(self, static_configuration = static_config, dynamic_configuration = DynamicConfig(), static_fertigation=False):
+    def __init__(self, static_configuration = static_config, dynamic_configuration = DynamicConfig(), static_fertigation=False, method="sigmoid"):
         self.static_configuration = copy.deepcopy(static_configuration) # dont change original static config
         self.dynamic_configuration = dynamic_configuration
         self.static_fertigation = static_fertigation
@@ -108,7 +128,9 @@ class NitrateOptimizer():
         self.pid.output_limits = (-100, 100)  # Limit fertigation between 0 and 10 liters
         self.water_pid = PID(Kp=1, Ki=0.1, Kd=0.05, setpoint=self.wc_goal)
         self.water_pid.output_limits = (-0.1,0.1)
-
+        self.simulation_changing_params["active_uptake_amount_list"] = estimate_nitrate_uptake(self.no3_uptake, self.max_step + 1, method=method)
+        #print(self.simulation_changing_params["active_uptake_amount_list"])
+        
 
     def clear_past_days_data(self):
         """
