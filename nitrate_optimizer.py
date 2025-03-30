@@ -315,7 +315,6 @@ class NitrateOptimizer():
         plt.legend()
         plt.grid(True)
 
-
     def plot_fertigation_graphs(self):
         # Define step indices
         steps = range(len(self.irrigation_fertigation_log))
