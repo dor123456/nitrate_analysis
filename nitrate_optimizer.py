@@ -392,8 +392,8 @@ if __name__ == "__main__":
     simulation_PID = NitrateOptimizer(dynamic_configuration=dynamic_config, static_irrigation=True)
     simulation_PID.run()
     
-    # dynamic_config = set_dynamic_config()
-    # simulation_static_fert = NitrateOptimizer(dynamic_configuration=dynamic_config, static_fertigation=True, static_irrigation=True)
-    # simulation_static_fert.run()
+    dynamic_config = set_dynamic_config()
+    simulation_static_fert = NitrateOptimizer(dynamic_configuration=dynamic_config, static_fertigation=True, static_irrigation=True)
+    simulation_static_fert.run()
     
     plt.show() 
