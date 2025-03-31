@@ -114,10 +114,11 @@ class NitrateOptimizer():
                                   "transpiration_frac_list" : np.array([transpiration_calculation(LAI) for LAI in grow_linear_stay_at_max(0, 1, plant_growing_time, max_step+1)]),
                                   "ET_list" : get_ET_values()} # filepath="ET_Ovdat_long.csv")}
                                   
-    def __init__(self, static_configuration = static_config, dynamic_configuration = DynamicConfig(), static_fertigation=False, method="sigmoid"):
+    def __init__(self, static_configuration = static_config, dynamic_configuration = DynamicConfig(), static_fertigation=False, static_irrigation=False, method="sigmoid"):
         self.static_configuration = copy.deepcopy(static_configuration) # dont change original static config
         self.dynamic_configuration = dynamic_configuration
         self.static_fertigation = static_fertigation
+        self.static_irrigation = static_irrigation
         self.current_step = 0
         self.phydrus = None
         self.irrigation_fertigation_log = []
@@ -165,9 +166,13 @@ class NitrateOptimizer():
         self.phydrus = phydrus
         self.update_init_params()
         self.update_past_data_file()
-        self.decide_irrigation()
+
+        if not self.static_irrigation:
+            self.decide_irrigation()
+            
         if not self.static_fertigation:
             self.decide_fertigation()
+            
         irrigation_fertigation = (self.dynamic_configuration["precipitation"], self.dynamic_configuration["fertigation_conc"])
         self.irrigation_fertigation_log.append(irrigation_fertigation)
  
@@ -198,7 +203,8 @@ class NitrateOptimizer():
         
     def decide_irrigation_by_et(self):
         et = self.get_weekly_constant_et()
-        precipitation = et * 1.2
+        leaching_fraction = 1.2
+        precipitation = et * leaching_fraction
         self.dynamic_configuration["precipitation"] = precipitation 
         return precipitation
 
@@ -404,11 +410,11 @@ def set_dynamic_config():
 if __name__ == "__main__":
     
     dynamic_config = set_dynamic_config()
-    simulation_PID = NitrateOptimizer(dynamic_configuration=dynamic_config)
+    simulation_PID = NitrateOptimizer(dynamic_configuration=dynamic_config, static_fertigation=False, static_irrigation=True)
     simulation_PID.run()
     
     dynamic_config = set_dynamic_config()
-    simulation_static_fert = NitrateOptimizer(dynamic_configuration=dynamic_config, static_fertigation=True)
+    simulation_static_fert = NitrateOptimizer(dynamic_configuration=dynamic_config, static_fertigation=True, static_irrigation=True)
     simulation_static_fert.run()
     
 
